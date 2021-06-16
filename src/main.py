@@ -11,6 +11,8 @@ Arguments:
 #2. Show algo's advancement
 #3. Save gridsearch results in a text file
 #4. Print: size of subsample, number of new categories..
+import glob
+import os
 
 import pandas as pd
 import numpy as np
@@ -38,51 +40,53 @@ import lightgbm as lgb
 from sklearn.tree import DecisionTreeClassifier
 from pathlib import Path
 
-DATA = Path('../data/output_api_entreprise.csv')
+DATA = Path('../data')
 OUTPUT_FOLDER = Path('../output/fc')
 
 
 def main():
     # 1. Read data and drop useless columns
-    data = pd.read_csv(DATA)
-    data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
-                              'fondement_juridique_url'])
-    # 2. Missing values imputation: create a new category for missing values
-    data = impute_nans(data)
-    # 3. Aggregate categorical variables because of high cardinality
-    cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
-    data = aggregate_cat(data, cat_variables)
-    print()
-    # 4. Encoders (categorical variables & text)
-    one_hot_enc = OneHotEncoder(handle_unknown='ignore')
-    label_enc = preprocessing.LabelEncoder()
-    text_enc = TfidfVectorizer()
-    columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
-                                            (text_enc, 'intitule'), (text_enc, 'fondement_juridique_title'),
-                                            (text_enc,'description'))
-    # 5. Train/test splitting
-    y = data['status'].values
-    y = label_enc.fit_transform(y)
-    X = data.drop(columns=['status'])
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
-    # 6. Train and test algorithms
-    algorithms = [LogisticRegression(),RandomForestClassifier(),XGBClassifier(), CatBoostClassifier(),
-                  SVC(), MLPClassifier(), lgb.LGBMClassifier(), DecisionTreeClassifier()]
-    algorithms_names = ['LogisticRegression','RandomForestClassifier','XGBClassifier', 'CatBoostClassifier',
-                  'SVC', 'MLPClassifier', 'lgb.LGBMClassifier', 'DecisionTreeClassifier']
-    for algorithm,algo_name in zip(algorithms,algorithms_names):
-        algo = algorithm
-        pipe = make_pipeline(columns_trans,algo)
-        #algo_name = str(algorithm).partition('(')[0]
-        param_grid = algorithms_grid[algo_name]
-        grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
-        grid.fit(X_train, y_train)
-        prediction = grid.predict(X_test)
-        report = classification_report(y_test, prediction,output_dict=True)
-        pd.DataFrame(report).to_csv(f'{OUTPUT_FOLDER}/classif_report_{algo_name}.csv')
-        confusion = confusion_matrix(y_test, prediction)
-        sns.heatmap(confusion, annot=True, vmin=0, vmax=len(y_test),cmap='Blues', fmt='g')
-        plt.savefig(f'{OUTPUT_FOLDER}/confusion_matrix_{algo_name}.png')
+    list_csvs = glob.glob(os.path.join(DATA, "*.csv"))
+    for dataset in list_csvs:
+        data = pd.read_csv(dataset)
+        data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
+                                  'fondement_juridique_url'])
+        # 2. Missing values imputation: create a new category for missing values
+        data = impute_nans(data)
+        # 3. Aggregate categorical variables because of high cardinality
+        cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
+        data = aggregate_cat(data, cat_variables)
+        print()
+        # 4. Encoders (categorical variables & text)
+        one_hot_enc = OneHotEncoder(handle_unknown='ignore')
+        label_enc = preprocessing.LabelEncoder()
+        text_enc = TfidfVectorizer()
+        columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
+                                                (text_enc, 'intitule'), (text_enc, 'fondement_juridique_title'),
+                                                (text_enc,'description'))
+        # 5. Train/test splitting
+        y = data['status'].values
+        y = label_enc.fit_transform(y)
+        X = data.drop(columns=['status'])
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+        # 6. Train and test algorithms
+        algorithms = [LogisticRegression(),RandomForestClassifier(),XGBClassifier(), CatBoostClassifier(),
+                      SVC(), MLPClassifier(), lgb.LGBMClassifier(), DecisionTreeClassifier()]
+        algorithms_names = ['LogisticRegression','RandomForestClassifier','XGBClassifier', 'CatBoostClassifier',
+                      'SVC', 'MLPClassifier', 'lgb.LGBMClassifier', 'DecisionTreeClassifier']
+        for algorithm,algo_name in zip(algorithms,algorithms_names):
+            algo = algorithm
+            pipe = make_pipeline(columns_trans,algo)
+            #algo_name = str(algorithm).partition('(')[0]
+            param_grid = algorithms_grid[algo_name]
+            grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
+            grid.fit(X_train, y_train)
+            prediction = grid.predict(X_test)
+            report = classification_report(y_test, prediction,output_dict=True)
+            pd.DataFrame(report).to_csv(f'{OUTPUT_FOLDER}/classif_report_{algo_name}.csv')
+            confusion = confusion_matrix(y_test, prediction)
+            sns.heatmap(confusion, annot=True, vmin=0, vmax=len(y_test),cmap='Blues', fmt='g')
+            plt.savefig(f'{OUTPUT_FOLDER}/confusion_matrix_{algo_name}.png')
 
 
 
