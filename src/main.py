@@ -13,6 +13,7 @@ Arguments:
 #4. Print: size of subsample, number of new categories..
 import glob
 import os
+import re
 
 import pandas as pd
 import numpy as np
@@ -41,13 +42,15 @@ from sklearn.tree import DecisionTreeClassifier
 from pathlib import Path
 
 DATA = Path('../data')
-OUTPUT_FOLDER = Path('../output/fc')
+OUTPUT_FOLDER = Path('../output')
 
 
 def main():
-    # 1. Read data and drop useless columns
+    # 1. Read data, drop useless columns and create a proper output folder
     list_csvs = glob.glob(os.path.join(DATA, "*.csv"))
     for dataset in list_csvs:
+        name_output = re.search("/data/(.*?)\.csv",dataset).group(1)
+        os.mkdir(OUTPUT_FOLDER.joinpath(name_output))
         data = pd.read_csv(dataset)
         data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
                                   'fondement_juridique_url'])
@@ -56,7 +59,6 @@ def main():
         # 3. Aggregate categorical variables because of high cardinality
         cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
         data = aggregate_cat(data, cat_variables)
-        print()
         # 4. Encoders (categorical variables & text)
         one_hot_enc = OneHotEncoder(handle_unknown='ignore')
         label_enc = preprocessing.LabelEncoder()
@@ -77,16 +79,15 @@ def main():
         for algorithm,algo_name in zip(algorithms,algorithms_names):
             algo = algorithm
             pipe = make_pipeline(columns_trans,algo)
-            #algo_name = str(algorithm).partition('(')[0]
             param_grid = algorithms_grid[algo_name]
             grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
             grid.fit(X_train, y_train)
             prediction = grid.predict(X_test)
             report = classification_report(y_test, prediction,output_dict=True)
-            pd.DataFrame(report).to_csv(f'{OUTPUT_FOLDER}/classif_report_{algo_name}.csv')
+            pd.DataFrame(report).to_csv(f'{OUTPUT_FOLDER}/{name_output}/classif_report_{algo_name}.csv')
             confusion = confusion_matrix(y_test, prediction)
             sns.heatmap(confusion, annot=True, vmin=0, vmax=len(y_test),cmap='Blues', fmt='g')
-            plt.savefig(f'{OUTPUT_FOLDER}/confusion_matrix_{algo_name}.png')
+            plt.savefig(f'{OUTPUT_FOLDER}/{name_output}/confusion_matrix_{algo_name}.png')
 
 
 
