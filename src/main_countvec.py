@@ -33,7 +33,7 @@ from sklearn.tree import DecisionTreeClassifier
 from pathlib import Path
 
 DATA = Path('../data')
-OUTPUT_FOLDER = Path('../output_tfid')
+OUTPUT_FOLDER = Path('../output_countvec')
 
 
 def main():
@@ -57,10 +57,10 @@ def main():
         # 4. Encoders (categorical variables & text)
         one_hot_enc = OneHotEncoder(handle_unknown='ignore')
         label_enc = preprocessing.LabelEncoder()
-        text_enc_tfid = TfidfVectorizer()
-        columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc_tfid, 'nom_raison_sociale'),
-                                                (text_enc_tfid, 'intitule'), (text_enc_tfid, 'fondement_juridique_title'),
-                                                (text_enc_tfid, 'description'))
+        text_enc_count = CountVectorizer()
+        columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc_count, 'nom_raison_sociale'),
+                                                (text_enc_count, 'intitule'), (text_enc_count, 'fondement_juridique_title'),
+                                                (text_enc_count, 'description'))
         # 5. Train/test splitting
         y = data['status'].values
         y = label_enc.fit_transform(y)
@@ -105,11 +105,14 @@ def aggregate_cat(data, cat_variables):
     return data
 
 
-algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
-                                            "logisticregression__class_weight": ['balanced', {0: .3, 1: .7},
-                                                                                 {0: .4, 1: .6}, 'auto'],
-                                            "columntransformer__tfidfvectorizer-1__min_df": [1, 2],
-                                            "columntransformer__tfidfvectorizer-1__max_features": [None, 200],},
+algorithms_grid = {'LogisticRegression': {"logisticregression__C" : np.arange(0.4,1.5,0.2),
+             "logisticregression__class_weight":['balanced',{0:.3,1:.7},{0:.4,1:.6},'auto'],
+            "columntransformer__countvectorizer-1__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-1__min_df":[1,2],
+             "columntransformer__countvectorizer-2__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-2__min_df":[1,2],
+             "columntransformer__countvectorizer-3__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-3__min_df":[1,2]},
                    'RandomForestClassifier': {"randomforestclassifier__n_estimators": [100, 200, 400],
                                                 "randomforestclassifier__max_depth": [4, 6, 8, 10, 12, 15],
                                                 "randomforestclassifier__max_features": ["auto"],
@@ -117,8 +120,12 @@ algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4
                                                 "randomforestclassifier__random_state": [64],
                                                 "randomforestclassifier__class_weight": ['balanced', {0: .3, 1: .7},
                                                                                          {0: .4, 1: .6}],
-                                                "columntransformer__tfidfvectorizer-1__min_df": [1, 2],
-                                                "columntransformer__tfidfvectorizer-1__max_features": [None, 200]
+                                        "columntransformer__countvectorizer-1__ngram_range":[(1,1),(1,2)],
+                                                     "columntransformer__countvectorizer-1__min_df":[1,2],
+                                                     "columntransformer__countvectorizer-2__ngram_range":[(1,1),(1,2)],
+                                                     "columntransformer__countvectorizer-2__min_df":[1,2],
+                                                     "columntransformer__countvectorizer-3__ngram_range":[(1,1),(1,2)],
+                                                     "columntransformer__countvectorizer-3__min_df":[1,2]
                                                 },
 
                    'XGBClassifier': {
@@ -128,8 +135,12 @@ algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4
                        "xgbclassifier__max_depth": [4, 5, 6],
                        "xgbclassifier__min_child_weight": [1, 2],
                        "xgbclassifier__subsample": [0.5, 1.0],
-                       "columntransformer__tfidfvectorizer-1__min_df": [1, 2],
-                       "columntransformer__tfidfvectorizer-1__max_features": [None, 200]
+                    "columntransformer__countvectorizer-1__ngram_range":[(1,1),(1,2)],
+                                 "columntransformer__countvectorizer-1__min_df":[1,2],
+                                 "columntransformer__countvectorizer-2__ngram_range":[(1,1),(1,2)],
+                                 "columntransformer__countvectorizer-2__min_df":[1,2],
+                                 "columntransformer__countvectorizer-3__ngram_range":[(1,1),(1,2)],
+                                 "columntransformer__countvectorizer-3__min_df":[1,2]
                    },
                    'CatBoostClassifier': {
                        "catboostclassifier__learning_rate": [0.1],
@@ -137,8 +148,13 @@ algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4
                        "catboostclassifier__rsm": [0.9],  # random subspace method
                        "catboostclassifier__subsample": [1],  # random subspace method
                        "catboostclassifier__min_data_in_leaf": [15],
-                       "columntransformer__tfidfvectorizer-1__min_df": [1, 2],
-                       "columntransformer__tfidfvectorizer-1__max_features": [None, 200]},
+                       "columntransformer__countvectorizer-1__ngram_range": [(1, 1), (1, 2)],
+                       "columntransformer__countvectorizer-1__min_df": [1, 2],
+                       "columntransformer__countvectorizer-2__ngram_range": [(1, 1), (1, 2)],
+                       "columntransformer__countvectorizer-2__min_df": [1, 2],
+                       "columntransformer__countvectorizer-3__ngram_range": [(1, 1), (1, 2)],
+                       "columntransformer__countvectorizer-3__min_df": [1, 2]
+                   },
                    'SVC': {"svc__C": [0.1, 1.0],
                              "svc__gamma": ['auto'],
                              "svc__kernel": ['rbf', 'linear'],
@@ -152,8 +168,12 @@ algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4
                                        "mlpclassifier__learning_rate_init": [0.0001, 0.001],
                                        "mlpclassifier__random_state": [64],
                                        "mlpclassifier__early_stopping": [True],
-                                       "columntransformer__tfidfvectorizer-1__min_df": [1, 2],
-                                       "columntransformer__tfidfvectorizer-1__max_features": [None, 200]
+"columntransformer__countvectorizer-1__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-1__min_df":[1,2],
+             "columntransformer__countvectorizer-2__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-2__min_df":[1,2],
+             "columntransformer__countvectorizer-3__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-3__min_df":[1,2]
                                        },
                    'lgb.LGBMClassifier': {
                        "lgbmclassifier__objective": ["binary"],
@@ -163,14 +183,22 @@ algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4
                        "lgbmclassifier__feature_fraction": [0.8, 0.9, 1.0],
                        "lgbmclassifier__bagging_fraction": [0.8, 0.9, 1.0],
                        "lgbmclassifier__min_data_in_leaf": [5, 10, 15],
-                       "columntransformer__tfidfvectorizer-1__min_df": [1, 2],
-                       "columntransformer__tfidfvectorizer-1__max_features": [None, 200]
+"columntransformer__countvectorizer-1__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-1__min_df":[1,2],
+             "columntransformer__countvectorizer-2__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-2__min_df":[1,2],
+             "columntransformer__countvectorizer-3__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-3__min_df":[1,2]
                    },
                    'DecisionTreeClassifier': {
                        "decisiontreeclassifier__criterion": ["gini", "entropy"],
                        "decisiontreeclassifier__max_depth": np.arange(2, 30, 1),
-                       "columntransformer__tfidfvectorizer-1__min_df": [1, 2],
-                       "columntransformer__tfidfvectorizer-1__max_features": [None, 200]
+                       "columntransformer__countvectorizer-1__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-1__min_df":[1,2],
+             "columntransformer__countvectorizer-2__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-2__min_df":[1,2],
+             "columntransformer__countvectorizer-3__ngram_range":[(1,1),(1,2)],
+             "columntransformer__countvectorizer-3__min_df":[1,2]
                    }}
 
 if __name__ == "__main__":
