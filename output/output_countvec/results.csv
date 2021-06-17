@@ -1,25 +1,27 @@
-dataset_name,dataset_size,best_algo,best_accuracy,recall_0,recall_1,text_vect,remarks
-france_connect,1384,CatBoostClassifier,0.890173410404624,0.653846153846154,0.931972789115646,CountVec,
-api_entreprise,424,LogisticRegression,0.735849056603773,0.454545454545455,0.863013698630137,CountVec,investigate feature importance
-api_particulier,302,SVC,0.894736842105263,0.782608695652174,0.943396226415094,CountVec,investigate feature importance
-cartobio,190,LogisticRegression,0.9375,0,1,CountVec,only 6% of refused demands in the test dataset
-aidants_connect,179,CatBoostClassifier,0.955555555555556,0.5,0.976744186046512,CountVec,Only 4% of refused demands in the test dataset
-api_impot_particulier_sandbox,104,XGBClassifier,0.884615384615385,0.6,0.952380952380952,CountVec,
-api_r2p_sandbox,97,XGBClassifier,0.96,0,1,CountVec,Only 4% of refused demands in the test dataset
-api_ficoba_sandbox,22,LGBMClassifier,1,1,1,CountVec,investigate feature importance
-api_impot_particulier_fc_sandbox,21,"SVC, CatBoostClassifier",0.5,0.25,1,CountVec,more refused than validated in test
-le_taxi_chauffeurs,14,CatBoostClassifier,1,,1,CountVec,100% of refused
-francerelance_fc,13,LogisticRegression,1,,1,CountVec,100% of refused
-api_droits_cnam,3,,,,,,Dataset is too small
-api_hermes_sandbox,1,,,,,,Dataset is too small
-france_connect,1384,XGBClassifier,0.901734104046243,0.711538461538462,0.935374149659864,TfidVect,
-api_entreprise,424,RandomForestClassifier,0.754716981132076,0.484848484848485,0.876712328767123,TfidVect,
-api_particulier,302,XGBClassifier,0.907894736842105,0.826086956521739,0.943396226415094,TfidVect,
-cartobio,190,DecisionTreeClassifier,0.9375,0,1,,
-aidants_connect,179,LogisticRegression,0.955555555555556,0,1,TfidVect,
-api_impot_particulier_sandbox,104,RandomForestClassifier,0.961538461538462,1,0.952380952380952,TfidVect,
-api_r2p_sandbox,97,LogisticRegression,0.96,0,1,TfidVect,
-api_ficoba_sandbox,22,XGBClassifier,1,1,1,TfidVect,
-api_impot_particulier_fc_sandbox,21,SVC,0.666666666666667,1,0,TfidVect,
-le_taxi_chauffeurs,14,LogisticRegression,1,1,1,TfidVect,
-francerelance_fc,13,LogisticRegression,1,,1,TfidVect,
+"dataset_name","dataset_size","best_algo","best_accuracy","recall_0","recall_1","text_vect","remarks"
+"france_connect",1384,"CatBoostClassifier",0.890173410404624,0.653846153846154,0.931972789115646,"CountVec",
+"api_entreprise",424,"LogisticRegression",0.735849056603773,0.454545454545455,0.863013698630137,"CountVec","investigate feature importance"
+"api_particulier",302,"SVC",0.894736842105263,0.782608695652174,0.943396226415094,"CountVec","investigate feature importance"
+"cartobio",190,"LogisticRegression",0.9375,0,1,"CountVec","only 6% of refused demands in the test dataset"
+"aidants_connect",179,"CatBoostClassifier",0.955555555555556,0.5,0.976744186046512,"CountVec","Only 4% of refused demands in the test dataset"
+"api_impot_particulier_sandbox",104,"XGBClassifier",0.884615384615385,0.6,0.952380952380952,"CountVec",
+"api_r2p_sandbox",97,"XGBClassifier",0.96,0,1,"CountVec","Only 4% of refused demands in the test dataset"
+"api_ficoba_sandbox",22,"LGBMClassifier",1,1,1,"CountVec","investigate feature importance"
+"api_impot_particulier_fc_sandbox",21,"SVC, CatBoostClassifier",0.5,0.25,1,"CountVec","more refused than validated in test"
+"le_taxi_chauffeurs",14,"CatBoostClassifier",1,,1,"CountVec","100% of refused"
+"francerelance_fc",13,"LogisticRegression",1,,1,"CountVec","100% of refused"
+"api_droits_cnam",3,,,,,,"Dataset is too small"
+"api_hermes_sandbox",1,,,,,,"Dataset is too small"
+"france_connect",1384,"XGBClassifier",0.901734104046243,0.711538461538462,0.935374149659864,"TfidVect",
+"api_entreprise",424,"RandomForestClassifier",0.754716981132076,0.484848484848485,0.876712328767123,"TfidVect",
+"api_particulier",302,"XGBClassifier",0.907894736842105,0.826086956521739,0.943396226415094,"TfidVect",
+"cartobio",190,"DecisionTreeClassifier",0.9375,0,1,,
+"aidants_connect",179,"LogisticRegression",0.955555555555556,0,1,"TfidVect",
+"api_impot_particulier_sandbox",104,"RandomForestClassifier",0.961538461538462,1,0.952380952380952,"TfidVect",
+"api_r2p_sandbox",97,"LogisticRegression",0.96,0,1,"TfidVect",
+"api_ficoba_sandbox",22,"XGBClassifier",1,1,1,"TfidVect",
+"api_impot_particulier_fc_sandbox",21,"SVC",0.666666666666667,1,0,"TfidVect",
+"le_taxi_chauffeurs",14,"LogisticRegression",1,1,1,"TfidVect",
+"francerelance_fc",13,"LogisticRegression",1,,1,"TfidVect",
+"all_api",2766,"SVC",0.904624277456647,0.612903225806452,0.96830985915493,"TfidVect",
+"all_api",2766,"CatBoostClassifier",0.871387283236994,0.620967741935484,0.926056338028169,"CountVec",
