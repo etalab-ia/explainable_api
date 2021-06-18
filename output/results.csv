@@ -25,3 +25,8 @@
 "francerelance_fc",13,"LogisticRegression",1,,1,"CountVec","100% of refused"
 "api_droits_cnam",3,,,,,,"Dataset is too small"
 "api_hermes_sandbox",1,,,,,,"Dataset is too small"
+,,,,,,,
+,,,,,,,
+,,,,,,,
+,,,,,,,
+"Note to self: I later tested a different aggregation for categorical variables, this chenges results, improving them for some algos ans giving less good results to others",,,,,,,
