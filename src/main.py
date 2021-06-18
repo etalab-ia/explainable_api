@@ -52,7 +52,7 @@ def main():
         # 4. Encoders (categorical variables & text)
         one_hot_enc = OneHotEncoder(handle_unknown='ignore')
         label_enc = preprocessing.LabelEncoder()
-        text_enc_tfid = TfidfVectorizer()
+        text_enc_tfid = TfidfVectorizer(ngram_range=(1,2))
         columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc_tfid, 'nom_raison_sociale'),
                                                 (text_enc_tfid, 'intitule'),
                                                 (text_enc_tfid, 'fondement_juridique_title'),
