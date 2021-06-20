@@ -61,12 +61,12 @@ def main():
         y = data['status'].values
         y = label_enc.fit_transform(y)
         X = data.drop(columns=['status'])
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42,stratify=y)
         # 6. Train and test algorithms
         algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(), CatBoostClassifier(),
-                      SVC(), lgb.LGBMClassifier(), DecisionTreeClassifier()]
+                      SVC(), DecisionTreeClassifier()]
         algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier', 'CatBoostClassifier',
-                            'SVC', 'lgb.LGBMClassifier', 'DecisionTreeClassifier']
+                            'SVC', 'DecisionTreeClassifier']
         for algorithm, algo_name in zip(algorithms, algorithms_names):
             algo = algorithm
             pipe = make_pipeline(columns_trans, algo)
@@ -135,15 +135,6 @@ algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4
                            "svc__kernel": ['rbf', 'linear'],
                            "svc__class_weight": ['balanced', None, {0: .4, 1: .6}, {0: .3, 1: .7}, {0: .7, 1: .3}],
                            },
-                   'lgb.LGBMClassifier': {
-                       "lgbmclassifier__objective": ["binary"],
-                       "lgbmclassifier__metric": ["binary_logloss"],
-                       "lgbmclassifier__num_leaves": [3, 7, 15, 31],
-                       "lgbmclassifier__learning_rate": [0.05, 0.075, 0.1, 0.15],
-                       "lgbmclassifier__feature_fraction": [0.8, 0.9, 1.0],
-                       "lgbmclassifier__bagging_fraction": [0.8, 0.9, 1.0],
-                       "lgbmclassifier__min_data_in_leaf": [5, 10, 15],
-                   },
                    'DecisionTreeClassifier': {
                        "decisiontreeclassifier__criterion": ["gini", "entropy"],
                        "decisiontreeclassifier__max_depth": np.arange(2, 30, 1),
