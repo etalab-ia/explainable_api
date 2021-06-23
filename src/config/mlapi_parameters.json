@@ -1,0 +1,12 @@
+[
+  {
+    "data_dir":"../data",
+    "output_dir": "../output/output_tfid",
+    "simple_mode": false,
+    "aggregate_cat": true,
+    "explain_mode": false
+  }
+]
+
+
+
