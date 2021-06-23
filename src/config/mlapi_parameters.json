@@ -4,7 +4,9 @@
     "output_dir": "../output/output_tfid",
     "simple_mode": false,
     "aggregate_cat": true,
-    "explain_mode": false
+    "explain_mode": false,
+    "results_file": "../output/results.csv",
+    "test_author": "giulia"
   }
 ]
 
