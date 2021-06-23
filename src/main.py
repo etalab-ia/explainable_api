@@ -1,3 +1,16 @@
+"""This script trains and tests a given set of Machine Learning algorithms on the various csv files available in  the
+data_dir directory. Each csv file has the following columns:[id	target_api	status	siret	categorie_juridique	categorie_juridique_label	activite_principale	activite_principale_label	nom_raison_sociale	fondement_juridique_title	fondement_juridique_url	intitule	description	instruction_comment
+]. The goal is to predict the 'status' column.
+Parameters (in the config/mlapi_parameters.json config file):
+    * output_dir: path of the directory where to save all the results from the training and testing of algorithms
+    * simple_mode: if set to TRUE, only 3 algorithms are tested (LogisticRegression, XGBoostClassifier,DecisionTreeClassifier)
+    * aggregate_cat: if set to TRUE, less frequent categories (<0.4%)in the categorie_juridique_label and activite_principale_label column
+    are aggregated
+    * explain_mode: if set to TRUE,  XGBoostClassifier,DecisionTreeClassifier are trained and tested and SHAP plots and
+    a decisiontree are saved in the output_dir directory
+Other parameters (in the script):
+    * text_enc: vectorization of text data [TfidfVectorizer(ngram_range=(1, 3)), CountVectorizer(ngram_range=(1, 3))]"""
+
 import glob
 import os
 import re
@@ -24,18 +37,28 @@ from sklearn.svm import SVC
 import lightgbm as lgb
 from sklearn.tree import DecisionTreeClassifier
 from pathlib import Path
+import json
 
-DATA = Path('../data')
-OUTPUT_FOLDER = Path('../output/output_tfid')
+PARAMETER_FILE = Path("config/mlapi_parameters.json")
+if PARAMETER_FILE.exists():
+    with open(PARAMETER_FILE) as fout:
+        PARAMETERS = json.load(fout)
+else:
+    raise FileNotFoundError(f"Config file {PARAMETER_FILE.as_posix()} does not exist.")
+TEXT_ENC = TfidfVectorizer(ngram_range=(1, 3))
+
+for param in PARAMETERS:
+    data_dir = Path(param["data_dir"])
+    output_dir = Path(param["output_dir"])
 
 
 def main():
     # 1. Read data, drop useless columns and create a proper output folder
-    list_csvs = glob.glob(os.path.join(DATA, "*.csv"))
+    list_csvs = glob.glob(os.path.join(data_dir, "*.csv"))
     for dataset in list_csvs:
         name_output = re.search("/data/(.*?)\.csv", dataset).group(1)
-        if not OUTPUT_FOLDER.joinpath(name_output).exists():
-            os.mkdir(OUTPUT_FOLDER.joinpath(name_output))
+        if not output_dir.joinpath(name_output).exists():
+            os.mkdir(output_dir.joinpath(name_output))
         data = pd.read_csv(dataset)
         data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
                                   'fondement_juridique_url'])
@@ -44,29 +67,32 @@ def main():
         data = impute_nans(data)
         # 3. Aggregate categorical variables because of high cardinality
         cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
-        data = aggregate_cat(data, cat_variables)
-        print(
-            f"The new number of categories for categorie_juridique_label is {data['categorie_juridique_label'].nunique()}")
-        print(
-            f"The new number of categories for activite_principale_label is {data['activite_principale_label'].nunique()}")
+        for param in PARAMETERS:
+            if param["aggregate_cat"]:
+                data = aggregate_cat(data, cat_variables)
         # 4. Encoders (categorical variables & text)
         one_hot_enc = OneHotEncoder(handle_unknown='ignore')
         label_enc = preprocessing.LabelEncoder()
-        text_enc_tfid = TfidfVectorizer(ngram_range=(1,2))
-        columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc_tfid, 'nom_raison_sociale'),
-                                                (text_enc_tfid, 'intitule'),
-                                                (text_enc_tfid, 'fondement_juridique_title'),
-                                                (text_enc_tfid, 'description'))
+        text_enc = TEXT_ENC
+        columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
+                                                (text_enc, 'intitule'),
+                                                (text_enc, 'fondement_juridique_title'),
+                                                (text_enc, 'description'))
         # 5. Train/test splitting
         y = data['status'].values
         y = label_enc.fit_transform(y)
         X = data.drop(columns=['status'])
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42,stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
         # 6. Train and test algorithms
-        algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(), CatBoostClassifier(),
-                      SVC(), DecisionTreeClassifier()]
-        algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier', 'CatBoostClassifier',
-                            'SVC', 'DecisionTreeClassifier']
+        for param in PARAMETERS:
+            if param["simple_mode"]:
+                algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
+                algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier']
+            else:
+                algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(), CatBoostClassifier(),
+                              SVC()]
+                algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier',
+                                    'CatBoostClassifier', 'SVC']
         for algorithm, algo_name in zip(algorithms, algorithms_names):
             algo = algorithm
             pipe = make_pipeline(columns_trans, algo)
@@ -77,12 +103,12 @@ def main():
             print("Best estimator:\n{}".format(grid.best_estimator_))
             prediction = grid.predict(X_test)
             report = classification_report(y_test, prediction, output_dict=True)
-            pd.DataFrame(report).to_csv(f'{OUTPUT_FOLDER}/{name_output}/classif_report_{algo_name}.csv')
+            pd.DataFrame(report).to_csv(f'{output_dir}/{name_output}/classif_report_{algo_name}.csv')
             confusion = confusion_matrix(y_test, prediction)
             sns.heatmap(confusion, annot=True, vmin=0, vmax=len(y_test), cmap='Blues', fmt='g')
-            plt.savefig(f'{OUTPUT_FOLDER}/{name_output}/confusion_matrix_{algo_name}.png')
+            plt.savefig(f'{output_dir}/{name_output}/confusion_matrix_{algo_name}.png')
             plt.close()
-            print(f"Output saved in {OUTPUT_FOLDER}/{name_output}")
+            print(f"Output saved in {output_dir}/{name_output}")
 
 
 def impute_nans(data):
@@ -97,7 +123,7 @@ def aggregate_cat(data, cat_variables):
     for variable in cat_variables:
         if data[variable].nunique() > 20:
             for category in data[variable].unique():
-                if data[variable].value_counts()[category] / len(data) <= 0.01:
+                if data[variable].value_counts()[category] / len(data) <= 0.004:
                     data.loc[data[variable] == category, variable] = 'Autre'
     return data
 
