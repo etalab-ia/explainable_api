@@ -219,6 +219,7 @@ def main():
                                     'CatBoostClassifier', 'SVC', 'DecisionTreeClassifier']
             for algorithm, algo_name in zip(algorithms, algorithms_names):
                 new_results_row["algo_name"] = algo_name
+                print(f"Now starting to fit algorithm: {algo_name}")
                 # 7. GridSearch on pipeline
                 pipe = make_pipeline(columns_trans, algorithm)
                 if param["grid_search"]:
