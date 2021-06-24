@@ -34,7 +34,6 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 from sklearn.svm import SVC
-import lightgbm as lgb
 from sklearn.tree import DecisionTreeClassifier
 from pathlib import Path
 import json
@@ -62,13 +61,16 @@ def main():
         new_results_row["id"] = id_
         new_results_row["test_time"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         new_results_row["test_author"] = param["test_author"]
-        list_csvs = glob.glob(os.path.join(data_dir, "*.csv"))
-        for dataset in list_csvs:
-            name_output = re.search("/data/(.*?)\.csv", dataset).group(1)
+        list_csvs = [Path(p) for p in glob.glob(os.path.join(data_dir, "*.csv"))]
+        for dataset in list_csvs[:1]:
+            name_output = dataset.stem
             print(f"Now treating dataset named {name_output}")
             new_results_row["dataset_name"] = name_output
             if not output_dir.joinpath(f"{name_output}_{id_}").exists():
                 os.mkdir(output_dir.joinpath(f"{name_output}_{id_}"))
+                # ou
+                # output_dir.joinpath(f"{name_output}_{id_}").mkdir()
+
             data = pd.read_csv(dataset)
             new_results_row["dataset_length"] = len(data)
             new_results_row["refused (%)"] = round(data.groupby(['status']).count()['id']['refused'] / len(data) * 100,
@@ -87,7 +89,7 @@ def main():
             # 4. Encoders (categorical variables & text)
             one_hot_enc = OneHotEncoder(handle_unknown='ignore')
             label_enc = preprocessing.LabelEncoder()
-            text_enc = TEXT_ENC
+            text_enc = TfidfVectorizer(ngram_range=(1, 3))
             new_results_row["text_enc"] = str(text_enc)
             columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
                                                     (text_enc, 'intitule'),
@@ -109,14 +111,20 @@ def main():
                                     'CatBoostClassifier', 'SVC','DecisionTreeClassifier']
             for algorithm, algo_name in zip(algorithms, algorithms_names):
                 new_results_row["algo_name"] = algo_name
-                algo = algorithm
-                pipe = make_pipeline(columns_trans, algo)
-                param_grid = algorithms_grid[algo_name]
-                grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
+                pipe = make_pipeline(columns_trans, algorithm)
                 print(f"Now starting to fit : {algo_name}")
-                grid.fit(X_train, y_train)
-                print("Best estimator:\n{}".format(grid.best_estimator_))
-                prediction = grid.predict(X_test)
+                if param["grid_search"]:
+                    param_grid = algorithms_grid[algo_name]
+                    grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
+                    grid.fit(X_train, y_train)
+                    print(f"Best estimator:\n{grid.best_estimator_}")
+                    prediction = grid.predict(X_test)
+                    new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
+                else:
+                    pipe.fit(X_train, y_train)
+                    prediction = pipe.predict(X_test)
+                    new_results_row["params"] = str(algorithm.get_params())
+
                 report = classification_report(y_test, prediction, output_dict=True)
                 pd.DataFrame(report).to_csv(f'{output_dir}/{name_output}_{id_}/classif_report_{algo_name}.csv')
                 new_results_row["accuracy"] = report["accuracy"]
@@ -125,7 +133,6 @@ def main():
                 new_results_row["precision_0"] = report["0"]["precision"]
                 new_results_row["precision_1"] = report["1"]["precision"]
                 new_results_row["f_score_macro"] = report["macro avg"]["f1-score"]
-                new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
                 confusion = confusion_matrix(y_test, prediction)
                 sns.heatmap(confusion, annot=True, vmin=0, vmax=len(y_test), cmap='Blues', fmt='g')
                 plt.savefig(f'{output_dir}/{name_output}_{id_}/confusion_matrix_{algo_name}.png')
