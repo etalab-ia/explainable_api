@@ -1,15 +1,26 @@
 """This script trains and tests a given set of Machine Learning algorithms on the various csv files available in  the
-data_dir directory. Each csv file has the following columns:[id	target_api	status	siret	categorie_juridique	categorie_juridique_label	activite_principale	activite_principale_label	nom_raison_sociale	fondement_juridique_title	fondement_juridique_url	intitule	description	instruction_comment
-]. The goal is to predict the 'status' column.
-Parameters (in the config/mlapi_parameters.json config file):
-    * output_dir: path of the directory where to save all the results from the training and testing of algorithms
-    * simple_mode: if set to TRUE, only 3 algorithms are tested (LogisticRegression, XGBoostClassifier,DecisionTreeClassifier)
-    * aggregate_cat: if set to TRUE, less frequent categories (<0.4%)in the categorie_juridique_label and activite_principale_label column
-    are aggregated
-    * (TO DO) explain_mode : if set to TRUE,  XGBoostClassifier,DecisionTreeClassifier are trained and tested and SHAP plots and
-    a Decision Tree are saved in the output_dir directory
-Other parameters (in the script):
-    * text_enc: vectorization of text data [TfidfVectorizer(ngram_range=(1, 3)), CountVectorizer(ngram_range=(1, 3))]"""
+data_dir directory. Each csv file has the following columns:[id	target_api , status,siret,categorie_juridique,
+categorie_juridique_label,activite_principale,activite_principale_label,nom_raison_sociale,
+fondement_juridique_title,fondement_juridique_url,intitule,description,instruction_comment ].
+
+The goal is to predict the 'status' column.
+
+Parameters - in the config/mlapi_parameters.json config file :
+1. output_dir: path of the directory where to save all the results from the training and testing of algorithms
+2. simple_mode: if set to TRUE, only 3 algorithms are tested (LogisticRegression, XGBoostClassifier,DecisionTreeClassifier)
+3. aggregate_cat: if set to TRUE, less frequent categories (<0.4%)in the categorical columns are aggregated
+4. (TO DO) explain_mode : if set to TRUE,  XGBoostClassifier,DecisionTreeClassifier are trained and tested
+and SHAP plots and a Decision Tree are saved in the output_dir directory
+
+Other parameters - in the script:
+1. text_enc: vectorization of text data [TfidfVectorizer(ngram_range=(1, 3)) OR CountVectorizer(ngram_range=(1, 3))]
+
+Script's output:
+1. A csv file (*results file* parameter in mlapi_parameters.json) recording all the parameters used in each experience,
+identified by an unique ID
+2. For each experience, the confusion matrix and the classification report (with all the metrics) in saved in
+output_dir/dataset_name_ID
+"""
 
 import glob
 import matplotlib.pyplot as plt
@@ -32,7 +43,6 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 from sklearn.svm import SVC
-import lightgbm as lgb
 from sklearn.tree import DecisionTreeClassifier
 from pathlib import Path
 import json
@@ -50,7 +60,10 @@ TEXT_ENC = TfidfVectorizer(ngram_range=(1, 3))
 
 
 def prepare_results_csv(new_results_row, param):
-    """This function fills a dictionary for the results csv file with some basic info about the experiment."""
+    """This function fills the new_results_row dictionary with some basic info about the experiment (experience ID, time etc.).
+    The dictionary will then be used to add a new line in the results csv file
+    :param:     :new_results_row : info about current experience -- dictionary
+    :param:     :param : parameters chosen in mlapi_parameters.json"""
     id_ = shortuuid.uuid()
     new_results_row["id"] = id_
     new_results_row["test_time"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -59,9 +72,13 @@ def prepare_results_csv(new_results_row, param):
 
 
 def update_results(new_results_row, name_output, data, param):
-    """This function updates the dictionary new_results_row with more info about the dataset: dataset_name,
-    dataset_length,refused (%),aggregate_cat,explain_mode. The dictionary will then be used to add a new line
-     in the results csv files"""
+    """This function updates new_results_row with more info about the dataset: dataset_name,
+    dataset_length,refused (%),aggregate_cat,explain_mode. new_results_row will then be used to add a new line
+    in the results csv file
+    :param:     :new_results_row : info about current experience -- dictionary
+    :param:     :name_output: dataset_name -- string
+    :param:     :data: dataset -- Pandas Dataframe
+    :param:     :param : parameters chosen in mlapi_parameters.json """
     new_results_row["dataset_name"] = name_output
     new_results_row["dataset_length"] = len(data)
     new_results_row["refused (%)"] = round(data.groupby(['status']).count()['id']['refused'] / len(data) * 100,
@@ -73,7 +90,7 @@ def update_results(new_results_row, name_output, data, param):
 
 
 def drop_useless_var(data):
-    """This function drops the useless columns from the data dataframe."""
+    """This function drops the useless columns from the data Pandas dataframe."""
     data = data.drop(
         columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
                  'fondement_juridique_url'])
@@ -94,10 +111,8 @@ def impute_nans(data):
 
 def aggregate_cat(data, cat_variables):
     """This function aggregates the least common categories (<0.4%) to prepare variables to OneHotEncoding.
-    :param:     :data: dataset to treat
-    :type:      :data: Pandas dataframe
-    :param:     :cat_variables: list of categorical variables
-    :type:      :cat_variables: list"""
+    :param:     :data: dataset -- Pandas dataframe
+    :param:     :cat_variables: categorical variables -- list"""
     for variable in cat_variables:
         if data[variable].nunique() > 20:
             for category in data[variable].unique():
@@ -107,7 +122,11 @@ def aggregate_cat(data, cat_variables):
 
 
 def encode_vars(cat_variables, text_enc, new_results_row):
-    """This function returns a column transformer for text data and categorical variables."""
+    """This function returns a column transformer for text data and categorical variables.
+    :param:     :cat_variables: categorical variables -- list
+    :param:     :text_enc: chosen text vectorizer [TfidfVectorizer(ngram_range=(1, 3)) OR CountVectorizer(ngram_range=(1, 3))]
+    :param:     :new_results_row : info about current experience -- dictionary
+    """
     one_hot_enc = OneHotEncoder(handle_unknown='ignore')
     new_results_row["text_enc"] = str(text_enc)
     columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
@@ -131,7 +150,16 @@ def split_train_test(data):
 def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, parameters_used, results,
                     results_csv):
     """This function computes all the metrics associated with the prediction and saves the output results in
-    output_dir. """
+    output_dir.
+    :param:     :y_test: scikit-learn y_true -- numpy array
+    :param:     :prediction: scikit-learn y_pred -- numpy array
+    :param      :output_dir: output direcoty -- Path
+    :param:     :id_: experience's ID -- str
+    :param:     :new_results_row:  info about current experience -- dictionary
+    :param:     :algo_name: name of current scikit-learn algorithm -- str
+    :param:     :grid: GridSearchResult
+    :param:     :results: updated info about current experience -- Pandas Dataframe
+    :param:     :results_csv: Path of the results csv file"""
     report = classification_report(y_test, prediction, output_dict=True)
     pd.DataFrame(report).to_csv(f'{output_dir}/{name_output}_{id_}/classif_report_{algo_name}.csv')
     new_results_row["accuracy"] = report["accuracy"]
