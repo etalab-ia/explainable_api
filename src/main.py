@@ -23,8 +23,6 @@ output_dir/dataset_name_ID
 """
 
 import glob
-import os
-import re
 import matplotlib.pyplot as plt
 
 import pandas as pd
@@ -149,7 +147,7 @@ def split_train_test(data):
     return X_train, X_test, y_train, y_test
 
 
-def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, grid, results,
+def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, parameters_used, results,
                     results_csv):
     """This function computes all the metrics associated with the prediction and saves the output results in
     output_dir.
@@ -170,7 +168,7 @@ def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_result
     new_results_row["precision_0"] = report["0"]["precision"]
     new_results_row["precision_1"] = report["1"]["precision"]
     new_results_row["f_score_macro"] = report["macro avg"]["f1-score"]
-    new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
+    new_results_row["params"] = parameters_used
     confusion = confusion_matrix(y_test, prediction)
     sns.heatmap(confusion, annot=True, vmin=0, vmax=len(y_test), cmap='Blues', fmt='g')
     plt.savefig(f'{output_dir}/{name_output}_{id_}/confusion_matrix_{algo_name}.png')
@@ -189,13 +187,13 @@ def main():
         results = pd.read_csv(results_csv)
         new_results_row = {}
         new_results_row, id_ = prepare_results_csv(new_results_row, param)
-        list_csvs = glob.glob(os.path.join(data_dir, "*.csv"))
+        list_csvs = [Path(p) for p in glob.glob(data_dir.joinpath("./*.csv").as_posix())]
         for dataset in list_csvs:
-            name_output = re.search("/data/(.*?)\.csv", dataset).group(1)
+            name_output = dataset.stem
             print(f"Now treating dataset named {name_output}")
             # 1. Read data, drop useless columns and create a proper output folder
             if not output_dir.joinpath(f"{name_output}_{id_}").exists():
-                os.mkdir(output_dir.joinpath(f"{name_output}_{id_}"))
+                output_dir.joinpath(f"{name_output}_{id_}").mkdir()
             data = pd.read_csv(dataset)
             new_results_row = update_results(new_results_row, name_output, data, param)
             data = drop_useless_var(data)
@@ -206,7 +204,7 @@ def main():
             if param["aggregate_cat"]:
                 data = aggregate_cat(data, cat_variables)
             # 4. Encoders (categorical variables & text)
-            text_enc = TEXT_ENC
+            text_enc = TfidfVectorizer(ngram_range=(1, 3))
             columns_trans, new_results_row = encode_vars(cat_variables, text_enc, new_results_row)
             # 5. Train/test splitting
             X_train, X_test, y_train, y_test = split_train_test(data)
@@ -221,16 +219,23 @@ def main():
                                     'CatBoostClassifier', 'SVC', 'DecisionTreeClassifier']
             for algorithm, algo_name in zip(algorithms, algorithms_names):
                 new_results_row["algo_name"] = algo_name
-                algo = algorithm
                 # 7. GridSearch on pipeline
-                pipe = make_pipeline(columns_trans, algo)
-                param_grid = algorithms_grid[algo_name]
-                grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
-                print(f"Now starting to fit : {algo_name}")
-                grid.fit(X_train, y_train)
-                prediction = grid.predict(X_test)
-                compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, grid,
-                                results, results_csv)
+                pipe = make_pipeline(columns_trans, algorithm)
+                if param["grid_search"]:
+                    param_grid = algorithms_grid[algo_name]
+                    grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
+                    grid.fit(X_train, y_train)
+                    print(f"Best estimator:\n{grid.best_estimator_}")
+                    prediction = grid.predict(X_test)
+                    new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
+                    parameters_used = str(grid.best_estimator_[algo_name.lower()])
+                else:
+                    pipe.fit(X_train, y_train)
+                    prediction = pipe.predict(X_test)
+                    new_results_row["params"] = str(algorithm.get_params())
+                    parameters_used = algorithm.get_params(False)
+                compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name,
+                                parameters_used, results, results_csv)
 
 
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
