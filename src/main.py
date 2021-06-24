@@ -48,6 +48,8 @@ from pathlib import Path
 import json
 from datetime import datetime
 import shortuuid
+import nltk
+from nltk.corpus import stopwords
 
 PARAMETER_FILE = Path("config/mlapi_parameters.json")
 if PARAMETER_FILE.exists():
@@ -179,6 +181,17 @@ def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_result
     return results
 
 
+def remove_stopwords(data, text_col):
+    """This function removes all the stopwords from the text columns of a given dataframe."""
+    stopwords_list = stopwords.words('french')
+    for word in ['de la', 'DE', 'DES']:
+        stopwords_list.append(word)
+    pat = r'\b(?:{})\b'.format('|'.join(stopwords_list))
+    for col in text_col:
+        data[col] = data[col].str.replace(pat, '')
+    return data
+
+
 def main():
     for param in PARAMETERS:
         data_dir = Path(param["data_dir"])
@@ -205,6 +218,8 @@ def main():
                 data = aggregate_cat(data, cat_variables)
             # 4. Encoders (categorical variables & text)
             text_enc = TfidfVectorizer(ngram_range=(1, 3))
+            text_col = ['nom_raison_sociale','intitule','fondement_juridique_title','description']
+            data = remove_stopwords(data, text_col)
             columns_trans, new_results_row = encode_vars(cat_variables, text_enc, new_results_row)
             # 5. Train/test splitting
             X_train, X_test, y_train, y_test = split_train_test(data)
