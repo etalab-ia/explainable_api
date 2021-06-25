@@ -49,6 +49,8 @@ import json
 from datetime import datetime
 import shortuuid
 from nltk.corpus import stopwords
+import shap
+from sklearn import tree
 
 PARAMETER_FILE = Path("config/mlapi_parameters.json")
 if PARAMETER_FILE.exists():
@@ -179,6 +181,36 @@ def remove_stopwords(data, text_col):
     return data
 
 
+def plot_shap(grid, X_train, output_dir, name_output, id_, param):
+    """This function produces shap summary plot for feature importance for the XGBoost model."""
+    if param['grid_search']:
+        model = grid.best_estimator_.named_steps['xgbclassifier']
+        transf = grid.best_estimator_.named_steps['columntransformer']
+    else:
+        model = grid.named_steps['xgbclassifier']
+        transf = grid.named_steps['columntransformer']
+    feature_names = transf.get_feature_names()
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(transf.fit_transform(X_train))
+    shap.summary_plot(shap_values, transf.fit_transform(X_train), plot_type="bar", feature_names=feature_names,
+                      show=False)
+    plt.savefig(f'{output_dir}/{name_output}_{id_}/shap_summary_plot.png')
+    plt.close()
+
+def plot_tree(grid, output_dir, name_output, id_,param):
+    """This function plots the current Decision Tree."""
+    if param['grid_search']:
+        model = grid.best_estimator_.named_steps['xgbclassifier']
+        transf = grid.best_estimator_.named_steps['columntransformer']
+    else:
+        model = grid.named_steps['xgbclassifier']
+        transf = grid.best_estimator_.named_steps['columntransformer']
+    feature_names = transf.get_feature_names()
+    fig = plt.figure(figsize=(300, 220))
+    tree.plot_tree(model, feature_names=feature_names, max_depth=2, filled=True, fontsize=150)
+    fig.savefig(f'{output_dir}/{name_output}_{id_}/decision_tree.png')
+    pass
+
 def main():
     for param in PARAMETERS:
         data_dir = Path(param["data_dir"])
@@ -201,9 +233,9 @@ def main():
             new_results_row = update_results(new_results_row, name_output, data, param, text_enc)
             agg_cat = param["aggregate_cat"]
             X, y, columns_trans = preprocess_data(data, text_enc, agg_cat)
-            # 3. Train/test splitting
+            # 4. Train/test splitting
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
-            # 4. Train and test algorithms
+            # 5. Train and test algorithms
             if param["simple_mode"]:
                 algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
                 algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier']
@@ -215,18 +247,29 @@ def main():
             for algorithm, algo_name in zip(algorithms, algorithms_names):
                 new_results_row["algo_name"] = algo_name
                 print(f"Now starting to fit algorithm: {algo_name}")
-                # 7. GridSearch on pipeline
+                # 6. GridSearch on pipeline
                 pipe = make_pipeline(columns_trans, algorithm)
                 if param["grid_search"]:
                     param_grid = algorithms_grid[algo_name]
                     grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
                     grid.fit(X_train, y_train)
+                    # 7. SHAP plot
+                    if param["explain_mode"]:
+                        if algo_name == 'XGBClassifier':
+                            plot_shap(grid, X_train, output_dir, name_output, id_, param)
+                        elif algo_name == 'DecisionTreeClassifier':
+                            plot_tree(grid, output_dir, name_output, id_, param)
                     print(f"Best estimator:\n{grid.best_estimator_}")
                     prediction = grid.predict(X_test)
                     new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
                     parameters_used = str(grid.best_estimator_[algo_name.lower()])
                 else:
                     pipe.fit(X_train, y_train)
+                    if param["explain_mode"]:
+                        if algo_name == 'XGBClassifier':
+                            plot_shap(pipe, X_train, output_dir, name_output, id_, param)
+                        elif algo_name == 'DecisionTreeClassifier':
+                            plot_tree(grid, output_dir, name_output, id_, param)
                     prediction = pipe.predict(X_test)
                     new_results_row["params"] = str(algorithm.get_params())
                     parameters_used = algorithm.get_params(False)
