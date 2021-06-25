@@ -48,7 +48,6 @@ from pathlib import Path
 import json
 from datetime import datetime
 import shortuuid
-import nltk
 from nltk.corpus import stopwords
 
 PARAMETER_FILE = Path("config/mlapi_parameters.json")
@@ -73,7 +72,7 @@ def prepare_results_csv(new_results_row, param):
     return new_results_row, id_
 
 
-def update_results(new_results_row, name_output, data, param):
+def update_results(new_results_row, name_output, data, param, text_enc):
     """This function updates new_results_row with more info about the dataset: dataset_name,
     dataset_length,refused (%),aggregate_cat,explain_mode. new_results_row will then be used to add a new line
     in the results csv file
@@ -87,16 +86,30 @@ def update_results(new_results_row, name_output, data, param):
                                            2)
     new_results_row["aggregate_cat"] = str(param["aggregate_cat"])
     new_results_row["explain_mode"] = str(param["explain_mode"])
-
+    new_results_row["text_enc"] = str(text_enc)
     return new_results_row
 
 
-def drop_useless_var(data):
-    """This function drops the useless columns from the data Pandas dataframe."""
-    data = data.drop(
-        columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
-                 'fondement_juridique_url'])
-    return data
+def preprocess_data(data, text_enc, agg_cat):
+    """Returns X and y for a given dataset together with the adequate column transformer for a given text transformer"""
+    data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
+                              'fondement_juridique_url'])
+    data = impute_nans(data)
+    cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
+    if agg_cat:
+        data = aggregate_cat(data, cat_variables)
+    text_col = ['nom_raison_sociale', 'intitule', 'fondement_juridique_title', 'description']
+    data = remove_stopwords(data, text_col)
+    one_hot_enc = OneHotEncoder(handle_unknown='ignore')
+    label_enc = preprocessing.LabelEncoder()
+    columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
+                                            (text_enc, 'intitule'),
+                                            (text_enc, 'fondement_juridique_title'),
+                                            (text_enc, 'description'))
+    y = data['status'].values
+    y = label_enc.fit_transform(y)
+    X = data.drop(columns=['status'])
+    return X, y, columns_trans
 
 
 def impute_nans(data):
@@ -123,33 +136,8 @@ def aggregate_cat(data, cat_variables):
     return data
 
 
-def encode_vars(cat_variables, text_enc, new_results_row):
-    """This function returns a column transformer for text data and categorical variables.
-    :param:     :cat_variables: categorical variables -- list
-    :param:     :text_enc: chosen text vectorizer [TfidfVectorizer(ngram_range=(1, 3)) OR CountVectorizer(ngram_range=(1, 3))]
-    :param:     :new_results_row : info about current experience -- dictionary
-    """
-    one_hot_enc = OneHotEncoder(handle_unknown='ignore')
-    new_results_row["text_enc"] = str(text_enc)
-    columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
-                                            (text_enc, 'intitule'),
-                                            (text_enc, 'fondement_juridique_title'),
-                                            (text_enc, 'description'))
-    return columns_trans, new_results_row
-
-
-def split_train_test(data):
-    """This function splits the given dataframe in train and test dataset (75%/25%) with stratification,
-    after encoding the target variable. """
-    y = data['status'].values
-    label_enc = preprocessing.LabelEncoder()
-    y = label_enc.fit_transform(y)
-    X = data.drop(columns=['status'])
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
-    return X_train, X_test, y_train, y_test
-
-
-def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, parameters_used, results,
+def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, parameters_used,
+                    results,
                     results_csv):
     """This function computes all the metrics associated with the prediction and saves the output results in
     output_dir.
@@ -184,11 +172,10 @@ def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_result
 def remove_stopwords(data, text_col):
     """This function removes all the stopwords from the text columns of a given dataframe."""
     stopwords_list = stopwords.words('french')
-    for word in ['de la', 'DE', 'DES']:
-        stopwords_list.append(word)
-    pat = r'\b(?:{})\b'.format('|'.join(stopwords_list))
+    pattern = r'\b(?:{})\b'.format('|'.join(stopwords_list))
     for col in text_col:
-        data[col] = data[col].str.replace(pat, '')
+        data[col] = data[col].str.lower()
+        data[col] = data[col].str.replace(pattern, '')
     return data
 
 
@@ -204,26 +191,19 @@ def main():
         for dataset in list_csvs:
             name_output = dataset.stem
             print(f"Now treating dataset named {name_output}")
-            # 1. Read data, drop useless columns and create a proper output folder
+            # 1. Create an output folder
             if not output_dir.joinpath(f"{name_output}_{id_}").exists():
                 output_dir.joinpath(f"{name_output}_{id_}").mkdir()
+            # 2. Read data
             data = pd.read_csv(dataset)
-            new_results_row = update_results(new_results_row, name_output, data, param)
-            data = drop_useless_var(data)
-            # 2. Missing values imputation: create a new category for missing values
-            data = impute_nans(data)
-            # 3. Aggregate categorical variables because of high cardinality if aggregate_cat param is TRUE
-            cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
-            if param["aggregate_cat"]:
-                data = aggregate_cat(data, cat_variables)
-            # 4. Encoders (categorical variables & text)
+            # 3. Preprocess data for ML
             text_enc = TfidfVectorizer(ngram_range=(1, 3))
-            text_col = ['nom_raison_sociale','intitule','fondement_juridique_title','description']
-            data = remove_stopwords(data, text_col)
-            columns_trans, new_results_row = encode_vars(cat_variables, text_enc, new_results_row)
-            # 5. Train/test splitting
-            X_train, X_test, y_train, y_test = split_train_test(data)
-            # 6. Train and test algorithms
+            new_results_row = update_results(new_results_row, name_output, data, param, text_enc)
+            agg_cat = param["aggregate_cat"]
+            X, y, columns_trans = preprocess_data(data, text_enc, agg_cat)
+            # 3. Train/test splitting
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
+            # 4. Train and test algorithms
             if param["simple_mode"]:
                 algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
                 algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier']
