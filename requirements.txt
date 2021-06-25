@@ -1,6 +1,7 @@
 argopt==0.7.0
 catboost==0.26
 certifi==2021.5.30
+click==8.0.1
 cycler==0.10.0
 graphviz==0.16
 joblib @ file:///tmp/build/80754af9/joblib_1613502643832/work
@@ -10,6 +11,7 @@ matplotlib @ file:///tmp/build/80754af9/matplotlib-suite_1613407855456/work
 mkl-fft==1.3.0
 mkl-random @ file:///tmp/build/80754af9/mkl_random_1618853971975/work
 mkl-service==2.3.0
+nltk==3.6.2
 numpy @ file:///tmp/build/80754af9/numpy_and_numpy_base_1620831195661/work
 olefile==0.46
 pandas==1.2.4
@@ -18,12 +20,15 @@ plotly==4.14.3
 pyparsing @ file:///home/linux1/recipes/ci/pyparsing_1610983426697/work
 python-dateutil @ file:///home/ktietz/src/ci/python-dateutil_1611928101742/work
 pytz @ file:///tmp/build/80754af9/pytz_1612215392582/work
+regex==2021.4.4
 retrying==1.3.3
 scikit-learn @ file:///tmp/build/80754af9/scikit-learn_1621370406642/work
 scipy @ file:///tmp/build/80754af9/scipy_1618855955483/work
 seaborn @ file:///tmp/build/80754af9/seaborn_1608578541026/work
+shortuuid==1.0.1
 sip==4.19.13
 six @ file:///tmp/build/80754af9/six_1605205306277/work
 threadpoolctl @ file:///tmp/tmp9twdgx9k/threadpoolctl-2.1.0-py3-none-any.whl
 tornado @ file:///tmp/build/80754af9/tornado_1606942317143/work
+tqdm==4.61.1
 xgboost==1.3.3
