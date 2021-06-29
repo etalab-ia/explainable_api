@@ -22,6 +22,8 @@ identified by an unique ID
 output_dir/dataset_name_ID
 """
 
+# TO DO: fix issue with saving decision tree figure
+
 import glob
 import matplotlib.pyplot as plt
 
@@ -181,6 +183,30 @@ def remove_stopwords(data, text_col):
     return data
 
 
+def plot_feature_imp(grid, X_train, output_dir, name_output, id_, param):
+    """This function produces SHAP summary plot for feature importance for an XGBoost model.
+    :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
+    :param:     :X_train: X_trains set; numpy array
+    :param:     :output_dir: name of the output directory where to save shap plot; str
+    :param:     :name_output: name of the algorithm; str
+    :param:     :id_: experiment's ID; str
+    :param:     :param: parameters from mlapi_parameters.json"""
+    if param['grid_search']:
+        model = grid.best_estimator_.named_steps['xgbclassifier']
+        transformer = grid.best_estimator_.named_steps['columntransformer']
+    else:
+        model = grid.named_steps['xgbclassifier']
+        transformer = grid.named_steps['columntransformer']
+    feature_names = transformer.get_feature_names()
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(transformer.fit_transform(X_train))
+    shap.summary_plot(shap_values, transformer.fit_transform(X_train).toarray(), feature_names=feature_names,
+                      show=False, plot_size=(25, 15))
+    plt.tight_layout()
+    plt.savefig(f'{output_dir}/{name_output}_{id_}/shap_summary_plot.png')
+    plt.close()
+
+
 def plot_shap(grid, X_train, output_dir, name_output, id_, param):
     """This function produces SHAP summary plot for feature importance for an XGBoost model.
     :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
@@ -199,8 +225,9 @@ def plot_shap(grid, X_train, output_dir, name_output, id_, param):
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(transformer.fit_transform(X_train))
     shap.summary_plot(shap_values, transformer.fit_transform(X_train), plot_type="bar", feature_names=feature_names,
-                      show=False)
-    plt.savefig(f'{output_dir}/{name_output}_{id_}/shap_summary_plot.png')
+                      show=False,plot_size=(25, 15))
+    plt.tight_layout()
+    plt.savefig(f'{output_dir}/{name_output}_{id_}/shap_feature_importance.png')
     plt.close()
 
 
@@ -219,9 +246,9 @@ def plot_tree(grid, output_dir, name_output, id_, param):
         model = grid.named_steps['decisiontreeclassifier']
         transformer = grid.named_steps['columntransformer']
     feature_names = transformer.get_feature_names()
-    fig,axes = plt.subplots(nrows=1,ncols=1,figsize=(10000/100,12000/100),dpi=100)
-    tree.plot_tree(model, feature_names=feature_names, max_depth=4, filled=True,fontsize=90,ax=axes)
-    plt.savefig(f'{output_dir}/{name_output}_{id_}/decision_tree.png',dpi=100)
+    fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10000 / 100, 12000 / 100), dpi=100)
+    tree.plot_tree(model, feature_names=feature_names, max_depth=4, filled=True, fontsize=90, ax=axes)
+    plt.savefig(f'{output_dir}/{name_output}_{id_}/decision_tree.png', dpi=100)
     plt.close()
 
 
@@ -270,9 +297,10 @@ def main():
                     # 7. SHAP plot
                     if param["explain_mode"]:
                         if algo_name == 'XGBClassifier':
+                            plot_feature_imp(grid, X_train, output_dir, name_output, id_, param)
                             plot_shap(grid, X_train, output_dir, name_output, id_, param)
-                        # elif algo_name == 'DecisionTreeClassifier':
-                        # plot_tree(grid, output_dir, name_output, id_, param)
+                        elif algo_name == 'DecisionTreeClassifier':
+                            plot_tree(grid, output_dir, name_output, id_, param)
                     print(f"Best estimator:\n{grid.best_estimator_}")
                     prediction = grid.predict(X_test)
                     new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
@@ -281,6 +309,7 @@ def main():
                     pipe.fit(X_train, y_train)
                     if param["explain_mode"]:
                         if algo_name == 'XGBClassifier':
+                            plot_feature_imp(pipe, X_train, output_dir, name_output, id_, param)
                             plot_shap(pipe, X_train, output_dir, name_output, id_, param)
                         elif algo_name == 'DecisionTreeClassifier':
                             plot_tree(pipe, output_dir, name_output, id_, param)
