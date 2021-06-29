@@ -53,6 +53,7 @@ import shortuuid
 from nltk.corpus import stopwords
 import shap
 from sklearn import tree
+import mglearn
 
 PARAMETER_FILE = Path("config/mlapi_parameters.json")
 if PARAMETER_FILE.exists():
@@ -225,7 +226,7 @@ def plot_shap(grid, X_train, output_dir, name_output, id_, param):
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(transformer.fit_transform(X_train))
     shap.summary_plot(shap_values, transformer.fit_transform(X_train), plot_type="bar", feature_names=feature_names,
-                      show=False,plot_size=(25, 15))
+                      show=False, plot_size=(25, 15))
     plt.tight_layout()
     plt.savefig(f'{output_dir}/{name_output}_{id_}/shap_feature_importance.png')
     plt.close()
@@ -251,6 +252,26 @@ def plot_tree(grid, output_dir, name_output, id_, param):
     plt.savefig(f'{output_dir}/{name_output}_{id_}/decision_tree.png', dpi=100)
     plt.close()
 
+
+def linear_coefficients(grid,param,output_dir,name_output,id_):
+    """This function displays the 10 larger coefficients and the 10 smallest coefficients for logistic
+    regression"""
+    if param['grid_search']:
+        transformer = grid.best_estimator_.named_steps['columntransformer']
+        feature_names = transformer.get_feature_names()
+        mglearn.tools.visualize_coefficients(
+            grid.best_estimator_.named_steps["logisticregression"].coef_,
+            feature_names, n_top_features=10)
+        plt.savefig(f'{output_dir}/{name_output}_{id_}/linear_coefficients.png',bbox_inches='tight')
+        plt.close()
+    else:
+        transformer = grid.named_steps['columntransformer']
+        feature_names = transformer.get_feature_names()
+        mglearn.tools.visualize_coefficients(
+            grid.named_steps["logisticregression"].coef_,
+            feature_names, n_top_features=10)
+        plt.savefig(f'{output_dir}/{name_output}_{id_}/linear_coefficients.png',bbox_inches='tight')
+        plt.close()
 
 def main():
     for param in PARAMETERS:
@@ -301,6 +322,8 @@ def main():
                             plot_shap(grid, X_train, output_dir, name_output, id_, param)
                         elif algo_name == 'DecisionTreeClassifier':
                             plot_tree(grid, output_dir, name_output, id_, param)
+                        elif algo_name=='LogisticRegression':
+                            linear_coefficients(grid, param, output_dir, name_output, id_)
                     print(f"Best estimator:\n{grid.best_estimator_}")
                     prediction = grid.predict(X_test)
                     new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
@@ -313,6 +336,8 @@ def main():
                             plot_shap(pipe, X_train, output_dir, name_output, id_, param)
                         elif algo_name == 'DecisionTreeClassifier':
                             plot_tree(pipe, output_dir, name_output, id_, param)
+                        elif algo_name == 'LogisticRegression':
+                            linear_coefficients(pipe, param, output_dir, name_output, id_)
                     prediction = pipe.predict(X_test)
                     new_results_row["params"] = str(algorithm.get_params())
                     parameters_used = algorithm.get_params(False)
