@@ -184,7 +184,7 @@ def remove_stopwords(data, text_col):
     return data
 
 
-def plot_feature_imp(grid, X_train, output_dir, name_output, id_, param):
+def plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output, id_):
     """This function produces SHAP summary plot for feature importance for an XGBoost model.
     :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
     :param:     :X_train: X_trains set; numpy array
@@ -192,13 +192,6 @@ def plot_feature_imp(grid, X_train, output_dir, name_output, id_, param):
     :param:     :name_output: name of the algorithm; str
     :param:     :id_: experiment's ID; str
     :param:     :param: parameters from mlapi_parameters.json"""
-    if param['grid_search']:
-        model = grid.best_estimator_.named_steps['xgbclassifier']
-        transformer = grid.best_estimator_.named_steps['columntransformer']
-    else:
-        model = grid.named_steps['xgbclassifier']
-        transformer = grid.named_steps['columntransformer']
-    feature_names = transformer.get_feature_names()
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(transformer.fit_transform(X_train))
     shap.summary_plot(shap_values, transformer.fit_transform(X_train).toarray(), feature_names=feature_names,
@@ -208,7 +201,7 @@ def plot_feature_imp(grid, X_train, output_dir, name_output, id_, param):
     plt.close()
 
 
-def plot_shap(grid, X_train, output_dir, name_output, id_, param):
+def plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_):
     """This function produces SHAP summary plot for feature importance for an XGBoost model.
     :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
     :param:     :X_train: X_trains set; numpy array
@@ -216,13 +209,6 @@ def plot_shap(grid, X_train, output_dir, name_output, id_, param):
     :param:     :name_output: name of the algorithm; str
     :param:     :id_: experiment's ID; str
     :param:     :param: parameters from mlapi_parameters.json"""
-    if param['grid_search']:
-        model = grid.best_estimator_.named_steps['xgbclassifier']
-        transformer = grid.best_estimator_.named_steps['columntransformer']
-    else:
-        model = grid.named_steps['xgbclassifier']
-        transformer = grid.named_steps['columntransformer']
-    feature_names = transformer.get_feature_names()
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(transformer.fit_transform(X_train))
     shap.summary_plot(shap_values, transformer.fit_transform(X_train), plot_type="bar", feature_names=feature_names,
@@ -232,7 +218,7 @@ def plot_shap(grid, X_train, output_dir, name_output, id_, param):
     plt.close()
 
 
-def plot_tree(grid, output_dir, name_output, id_, param):
+def plot_tree(model, feature_names, output_dir, name_output, id_):
     """This function plots the Decision Tree of the DecisionTreeClassifier currently fit.
     :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
     :param:     :X_train: X_trains set; numpy array
@@ -240,38 +226,34 @@ def plot_tree(grid, output_dir, name_output, id_, param):
     :param:     :name_output: name of the algorithm; str
     :param:     :id_: experiment's ID; str
     :param:     :param: parameters from mlapi_parameters.json"""
-    if param['grid_search']:
-        model = grid.best_estimator_.named_steps['decisiontreeclassifier']
-        transformer = grid.best_estimator_.named_steps['columntransformer']
-    else:
-        model = grid.named_steps['decisiontreeclassifier']
-        transformer = grid.named_steps['columntransformer']
-    feature_names = transformer.get_feature_names()
     fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10000 / 100, 12000 / 100), dpi=100)
     tree.plot_tree(model, feature_names=feature_names, max_depth=4, filled=True, fontsize=90, ax=axes)
     plt.savefig(f'{output_dir}/{name_output}_{id_}/decision_tree.png', dpi=100)
     plt.close()
 
 
-def linear_coefficients(grid,param,output_dir,name_output,id_):
+def linear_coefficients(model, feature_names, output_dir, name_output, id_):
     """This function displays the 10 larger coefficients and the 10 smallest coefficients for logistic
     regression"""
+    mglearn.tools.visualize_coefficients(
+        model.coef_,
+        feature_names, n_top_features=10)
+    plt.savefig(f'{output_dir}/{name_output}_{id_}/linear_coefficients.png', bbox_inches='tight')
+    plt.close()
+
+
+def info_from_pipeline(grid, param, algo_name):
+    """This function extracts some useful info from the pipeline: the model, the columns transformer and the
+    features names"""
     if param['grid_search']:
         transformer = grid.best_estimator_.named_steps['columntransformer']
-        feature_names = transformer.get_feature_names()
-        mglearn.tools.visualize_coefficients(
-            grid.best_estimator_.named_steps["logisticregression"].coef_,
-            feature_names, n_top_features=10)
-        plt.savefig(f'{output_dir}/{name_output}_{id_}/linear_coefficients.png',bbox_inches='tight')
-        plt.close()
+        model = grid.best_estimator_.named_steps[algo_name]
     else:
         transformer = grid.named_steps['columntransformer']
-        feature_names = transformer.get_feature_names()
-        mglearn.tools.visualize_coefficients(
-            grid.named_steps["logisticregression"].coef_,
-            feature_names, n_top_features=10)
-        plt.savefig(f'{output_dir}/{name_output}_{id_}/linear_coefficients.png',bbox_inches='tight')
-        plt.close()
+        model = grid.named_steps[algo_name]
+    feature_names = transformer.get_feature_names()
+    return transformer, feature_names, model
+
 
 def main():
     for param in PARAMETERS:
@@ -315,29 +297,31 @@ def main():
                     param_grid = algorithms_grid[algo_name]
                     grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
                     grid.fit(X_train, y_train)
+                    transformer, feature_names, model = info_from_pipeline(grid, param, algo_name=algo_name.lower())
                     # 7. SHAP plot
                     if param["explain_mode"]:
                         if algo_name == 'XGBClassifier':
-                            plot_feature_imp(grid, X_train, output_dir, name_output, id_, param)
-                            plot_shap(grid, X_train, output_dir, name_output, id_, param)
+                            plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output, id_)
+                            plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_)
                         elif algo_name == 'DecisionTreeClassifier':
-                            plot_tree(grid, output_dir, name_output, id_, param)
-                        elif algo_name=='LogisticRegression':
-                            linear_coefficients(grid, param, output_dir, name_output, id_)
+                            plot_tree(model, feature_names, output_dir, name_output, id_)
+                        elif algo_name == 'LogisticRegression':
+                            linear_coefficients(model, feature_names, output_dir, name_output, id_)
                     print(f"Best estimator:\n{grid.best_estimator_}")
                     prediction = grid.predict(X_test)
                     new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
                     parameters_used = str(grid.best_estimator_[algo_name.lower()])
                 else:
                     pipe.fit(X_train, y_train)
+                    transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
                     if param["explain_mode"]:
                         if algo_name == 'XGBClassifier':
-                            plot_feature_imp(pipe, X_train, output_dir, name_output, id_, param)
-                            plot_shap(pipe, X_train, output_dir, name_output, id_, param)
+                            plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output, id_)
+                            plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_)
                         elif algo_name == 'DecisionTreeClassifier':
-                            plot_tree(pipe, output_dir, name_output, id_, param)
+                            plot_tree(model, feature_names, output_dir, name_output, id_)
                         elif algo_name == 'LogisticRegression':
-                            linear_coefficients(pipe, param, output_dir, name_output, id_)
+                            linear_coefficients(model, feature_names, output_dir, name_output, id_)
                     prediction = pipe.predict(X_test)
                     new_results_row["params"] = str(algorithm.get_params())
                     parameters_used = algorithm.get_params(False)
