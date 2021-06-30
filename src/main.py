@@ -332,6 +332,8 @@ def main():
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
                                           "logisticregression__class_weight": ['balanced', {0: .3, 1: .7},
                                                                                {0: .4, 1: .6}, 'auto'],
+                                          "logisticregression__penalty":['elasticnet'],
+                                          "logisticregression__solver": ['saga']
                                           },
                    'RandomForestClassifier': {"randomforestclassifier__n_estimators": [100, 200, 400],
                                               "randomforestclassifier__max_depth": [4, 6, 8, 10, 12, 15],
