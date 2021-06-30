@@ -141,9 +141,7 @@ def aggregate_cat(data, cat_variables):
     return data
 
 
-def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, parameters_used,
-                    results,
-                    results_csv):
+def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, parameters_used):
     """This function computes all the metrics associated with the prediction and saves the output results in
     output_dir.
     :param:     :y_test: scikit-learn y_true -- numpy array
@@ -169,9 +167,8 @@ def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_result
     plt.savefig(f'{output_dir}/{name_output}_{id_}/confusion_matrix_{algo_name}.png')
     plt.close()
     print(f"Output saved in {output_dir}/{name_output}_{id_}")
-    results = results.append(new_results_row, ignore_index=True)
-    results.to_csv(results_csv, index=False)
-    return results
+
+    return new_results_row
 
 
 def remove_stopwords(data, text_col):
@@ -309,8 +306,12 @@ def main():
                             linear_coefficients(model, feature_names, output_dir, name_output, id_)
                     print(f"Best estimator:\n{grid.best_estimator_}")
                     prediction = grid.predict(X_test)
-                    new_results_row["params"] = str(grid.best_estimator_[algo_name.lower()])
                     parameters_used = str(grid.best_estimator_[algo_name.lower()])
+                    new_results_row = compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row,
+                                                      algo_name,
+                                                      parameters_used)
+                    results = results.append(new_results_row, ignore_index=True)
+                    results.to_csv(results_csv, index=False)
                 else:
                     pipe.fit(X_train, y_train)
                     transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
@@ -323,16 +324,18 @@ def main():
                         elif algo_name == 'LogisticRegression':
                             linear_coefficients(model, feature_names, output_dir, name_output, id_)
                     prediction = pipe.predict(X_test)
-                    new_results_row["params"] = str(algorithm.get_params())
                     parameters_used = algorithm.get_params(False)
-                compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name,
-                                parameters_used, results, results_csv)
+                    new_results_row = compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row,
+                                                      algo_name,
+                                                      parameters_used)
+                    results = results.append(new_results_row, ignore_index=True)
+                    results.to_csv(results_csv, index=False)
 
 
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
                                           "logisticregression__class_weight": ['balanced', {0: .3, 1: .7},
                                                                                {0: .4, 1: .6}, 'auto'],
-                                          "logisticregression__penalty":['elasticnet'],
+                                          "logisticregression__penalty": ['elasticnet'],
                                           "logisticregression__solver": ['saga']
                                           },
                    'RandomForestClassifier': {"randomforestclassifier__n_estimators": [100, 200, 400],
