@@ -2,12 +2,13 @@
   {
     "data_dir":"../data",
     "output_dir": "../output/output_tfid",
-    "simple_mode": true,
+    "simple_mode": false,
     "aggregate_cat": true,
-    "explain_mode": false,
+    "explain_mode": true,
     "results_file": "../output/results.csv",
     "test_author": "giulia",
-    "grid_search": false
+    "grid_search": false,
+    "all_features": true
   }
 ]
 
