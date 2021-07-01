@@ -92,14 +92,29 @@ def update_results(new_results_row, name_output, data, param, text_enc):
     new_results_row["aggregate_cat"] = str(param["aggregate_cat"])
     new_results_row["explain_mode"] = str(param["explain_mode"])
     new_results_row["text_enc"] = str(text_enc)
+    new_results_row["grid_search"] = str(param["grid_search"])
+    new_results_row["all_features"] = str(param["all_features"])
     return new_results_row
 
 
-def preprocess_data(data, text_enc, agg_cat):
+def modify_act_principale(data):
+    """Convert the codes NAF (https://www.legifrance.gouv.fr/loda/id/JORFTEXT000017765090/) of the activite_principale column
+    to meaningful numerical values."""
+    data['activite_principale'] = data['activite_principale'].str[:-1]
+    data['activite_principale'] = pd.to_numeric(data["activite_principale"], downcast="float")
+    return data['activite_principale']
+
+
+def preprocess_data(data, text_enc, agg_cat, all_features):
     """Returns X and y for a given dataset together with the adequate column transformer for a given text transformer"""
-    data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
-                              'fondement_juridique_url'])
-    data = impute_nans(data)
+    if all_features:
+        data = data.drop(columns=['id', 'siret','instruction_comment',
+                                      'fondement_juridique_url'])
+        data['activite_principale'] = modify_act_principale(data)
+    else:
+        data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
+                                  'fondement_juridique_url'])
+    data = impute_nans(data, all_features=all_features)
     cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
     if agg_cat:
         data = aggregate_cat(data, cat_variables)
@@ -117,15 +132,21 @@ def preprocess_data(data, text_enc, agg_cat):
     return X, y, columns_trans
 
 
-def impute_nans(data):
+def impute_nans(data, all_features):
     """This function imputes missing values in each column containing missing values by creating a new category
     called *missing*.
     :param:     :data: dataset to impute
-    :type:      :data: Pandas dataframe"""
+    :type:      :data: Pandas dataframe
+    :param:     :all_features: whether to consider all meaningful features or not
+    :type:      :all_features: bool"""
     missing_values_imp = SimpleImputer(strategy='constant', fill_value='missing')
     missing_cols = ['categorie_juridique_label', 'activite_principale_label', 'nom_raison_sociale', 'description',
                     'intitule', 'fondement_juridique_title']
     data[missing_cols] = missing_values_imp.fit_transform(data[missing_cols])
+    if all_features:
+        numerical_imputer = SimpleImputer(strategy='constant', fill_value=0)
+        numerical_missing = ['categorie_juridique', 'activite_principale']
+        data[numerical_missing] = numerical_imputer.fit_transform(data[numerical_missing])
     return data
 
 
@@ -252,6 +273,16 @@ def info_from_pipeline(grid, param, algo_name):
     return transformer, feature_names, model
 
 
+def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name):
+    """This function returns a csv file of the test dataset together with the result predicted by the algorithm."""
+    list_predicted_status = prediction.tolist()
+    test = X_test.copy()
+    test['real_status'] = y_test
+    test['status_predicted'] = list_predicted_status
+    test_df = pd.DataFrame(test)
+    test_df.to_csv(f'{output_dir}/{name_output}_{id_}/{algo_name}_test_data.csv')
+
+
 def main():
     for param in PARAMETERS:
         data_dir = Path(param["data_dir"])
@@ -273,7 +304,7 @@ def main():
             text_enc = TfidfVectorizer(ngram_range=(1, 3))
             new_results_row = update_results(new_results_row, name_output, data, param, text_enc)
             agg_cat = param["aggregate_cat"]
-            X, y, columns_trans = preprocess_data(data, text_enc, agg_cat)
+            X, y, columns_trans = preprocess_data(data, text_enc, agg_cat, all_features=param["all_features"])
             # 4. Train/test splitting
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
             # 5. Train and test algorithms
@@ -312,6 +343,7 @@ def main():
                                                       parameters_used)
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
+                    display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
                 else:
                     pipe.fit(X_train, y_train)
                     transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
@@ -330,13 +362,12 @@ def main():
                                                       parameters_used)
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
+                    display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
 
 
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
                                           "logisticregression__class_weight": ['balanced', {0: .3, 1: .7},
-                                                                               {0: .4, 1: .6}, 'auto'],
-                                          "logisticregression__penalty": ['elasticnet'],
-                                          "logisticregression__solver": ['saga']
+                                                                               {0: .4, 1: .6}, 'auto']
                                           },
                    'RandomForestClassifier': {"randomforestclassifier__n_estimators": [100, 200, 400],
                                               "randomforestclassifier__max_depth": [4, 6, 8, 10, 12, 15],
