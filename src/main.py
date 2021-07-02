@@ -1,7 +1,5 @@
 """This script trains and tests a given set of Machine Learning algorithms on the various csv files available in  the
-data_dir directory. Each csv file has the following columns:[id	target_api , status,siret,categorie_juridique,
-categorie_juridique_label,activite_principale,activite_principale_label,nom_raison_sociale,
-fondement_juridique_title,fondement_juridique_url,intitule,description,instruction_comment ].
+data_dir directory.
 
 The goal is to predict the 'status' column.
 
@@ -9,8 +7,10 @@ Parameters - in the config/mlapi_parameters.json config file :
 1. output_dir: path of the directory where to save all the results from the training and testing of algorithms
 2. simple_mode: if set to TRUE, only 3 algorithms are tested (LogisticRegression, XGBoostClassifier,DecisionTreeClassifier)
 3. aggregate_cat: if set to TRUE, less frequent categories (<0.4%)in the categorical columns are aggregated
-4. (TO DO) explain_mode : if set to TRUE,  XGBoostClassifier,DecisionTreeClassifier are trained and tested
-and SHAP plots and a Decision Tree are saved in the output_dir directory
+4. explain_mode : if set to TRUE,  XGBoostClassifier,DecisionTreeClassifier are trained and tested
+and SHAP plots, linear coefficients plots and a Decision Tree are saved in the output_dir directory
+5. grid_search: if set to TRUE, a GridSearch is performed using the hyperparameters at the end of the script. Otherwise,
+default values are used
 
 Other parameters - in the script:
 1. text_enc: vectorization of text data [TfidfVectorizer(ngram_range=(1, 3)) OR CountVectorizer(ngram_range=(1, 3))]
@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 
 import pandas as pd
 import numpy as np
+from shapash.explainer.smart_explainer import SmartExplainer
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
@@ -54,6 +55,7 @@ from nltk.corpus import stopwords
 import shap
 from sklearn import tree
 import mglearn
+from explainerdashboard import ClassifierExplainer, ExplainerDashboard
 
 PARAMETER_FILE = Path("config/mlapi_parameters.json")
 if PARAMETER_FILE.exists():
@@ -64,6 +66,12 @@ else:
 
 TEXT_ENC = TfidfVectorizer(ngram_range=(1, 3))
 
+
+# TO DO:  Modify all features to list of columns;
+# TO DO:  Formaliser l'analyse des erreurs
+# PISTES: traiter les demandes refusées comme des outliers
+# PISTES: similarité entre le texte
+# TO DO: have a look at precision/recall curve wih different thresholds
 
 def prepare_results_csv(new_results_row, param):
     """This function fills the new_results_row dictionary with some basic info about the experiment (experience ID, time etc.).
@@ -108,8 +116,8 @@ def modify_act_principale(data):
 def preprocess_data(data, text_enc, agg_cat, all_features):
     """Returns X and y for a given dataset together with the adequate column transformer for a given text transformer"""
     if all_features:
-        data = data.drop(columns=['id', 'siret','instruction_comment',
-                                      'fondement_juridique_url'])
+        data = data.drop(columns=['id', 'siret', 'instruction_comment',
+                                  'fondement_juridique_url'])
         data['activite_principale'] = modify_act_principale(data)
     else:
         data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
@@ -283,6 +291,11 @@ def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_
     test_df.to_csv(f'{output_dir}/{name_output}_{id_}/{algo_name}_test_data.csv')
 
 
+def explainer_dashboard(model, X_test, y_test):
+    explainer = ClassifierExplainer(model, X_test, y_test)
+    ExplainerDashboard(explainer).run()
+
+
 def main():
     for param in PARAMETERS:
         data_dir = Path(param["data_dir"])
@@ -309,8 +322,8 @@ def main():
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
             # 5. Train and test algorithms
             if param["simple_mode"]:
-                algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
-                algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier']
+                algorithms = [XGBClassifier()]
+                algorithms_names = ['XGBClassifier']
             else:
                 algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(), CatBoostClassifier(),
                               SVC(), DecisionTreeClassifier()]
@@ -344,6 +357,7 @@ def main():
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
                     display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
+                    explainer_dashboard(model=grid, X_test=X_test, y_test=y_test)
                 else:
                     pipe.fit(X_train, y_train)
                     transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
@@ -363,6 +377,7 @@ def main():
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
                     display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
+                    explainer_dashboard(model=pipe, X_test=X_test, y_test=y_test)
 
 
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
