@@ -64,8 +64,6 @@ if PARAMETER_FILE.exists():
 else:
     raise FileNotFoundError(f"Config file {PARAMETER_FILE.as_posix()} does not exist.")
 
-TEXT_ENC = TfidfVectorizer(ngram_range=(1, 3))
-
 
 # TO DO:  Modify all features to list of columns;
 # TO DO:  Formaliser l'analyse des erreurs
@@ -127,13 +125,18 @@ def preprocess_data(data, text_enc, agg_cat, all_features):
     if agg_cat:
         data = aggregate_cat(data, cat_variables)
     text_col = ['nom_raison_sociale', 'intitule', 'fondement_juridique_title', 'description']
-    data = remove_stopwords(data, text_col)
     one_hot_enc = OneHotEncoder(handle_unknown='ignore')
     label_enc = preprocessing.LabelEncoder()
-    columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
-                                            (text_enc, 'intitule'),
-                                            (text_enc, 'fondement_juridique_title'),
-                                            (text_enc, 'description'))
+    if data['target_api'].str.contains('api_impot_particulier_fc_sandbox').any() or data['target_api'].str.contains(
+            'api_r2p_sandbox').any():
+        data = data.drop(text_col)
+        columns_trans = make_column_transformer((one_hot_enc, cat_variables))
+    else:
+        data = remove_stopwords(data, text_col)
+        columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
+                                                (text_enc, 'intitule'),
+                                                (text_enc, 'fondement_juridique_title'),
+                                                (text_enc, 'description'))
     y = data['status'].values
     y = label_enc.fit_transform(y)
     X = data.drop(columns=['status'])
@@ -142,11 +145,7 @@ def preprocess_data(data, text_enc, agg_cat, all_features):
 
 def impute_nans(data, all_features):
     """This function imputes missing values in each column containing missing values by creating a new category
-    called *missing*.
-    :param:     :data: dataset to impute
-    :type:      :data: Pandas dataframe
-    :param:     :all_features: whether to consider all meaningful features or not
-    :type:      :all_features: bool"""
+    called *missing*."""
     missing_values_imp = SimpleImputer(strategy='constant', fill_value='missing')
     missing_cols = ['categorie_juridique_label', 'activite_principale_label', 'nom_raison_sociale', 'description',
                     'intitule', 'fondement_juridique_title']
@@ -173,15 +172,7 @@ def aggregate_cat(data, cat_variables):
 def compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row, algo_name, parameters_used):
     """This function computes all the metrics associated with the prediction and saves the output results in
     output_dir.
-    :param:     :y_test: scikit-learn y_true -- numpy array
-    :param:     :prediction: scikit-learn y_pred -- numpy array
-    :param      :output_dir: output direcoty -- Path
-    :param:     :id_: experience's ID -- str
-    :param:     :new_results_row:  info about current experience -- dictionary
-    :param:     :algo_name: name of current scikit-learn algorithm -- str
-    :param:     :grid: GridSearchResult
-    :param:     :results: updated info about current experience -- Pandas Dataframe
-    :param:     :results_csv: Path of the results csv file"""
+    """
     report = classification_report(y_test, prediction, output_dict=True)
     pd.DataFrame(report).to_csv(f'{output_dir}/{name_output}_{id_}/classif_report_{algo_name}.csv')
     new_results_row["accuracy"] = report["accuracy"]
@@ -212,12 +203,7 @@ def remove_stopwords(data, text_col):
 
 def plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output, id_):
     """This function produces SHAP summary plot for feature importance for an XGBoost model.
-    :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
-    :param:     :X_train: X_trains set; numpy array
-    :param:     :output_dir: name of the output directory where to save shap plot; str
-    :param:     :name_output: name of the algorithm; str
-    :param:     :id_: experiment's ID; str
-    :param:     :param: parameters from mlapi_parameters.json"""
+    """
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(transformer.fit_transform(X_train))
     shap.summary_plot(shap_values, transformer.fit_transform(X_train).toarray(), feature_names=feature_names,
@@ -229,12 +215,7 @@ def plot_feature_imp(transformer, model, feature_names, X_train, output_dir, nam
 
 def plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_):
     """This function produces SHAP summary plot for feature importance for an XGBoost model.
-    :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
-    :param:     :X_train: X_trains set; numpy array
-    :param:     :output_dir: name of the output directory where to save shap plot; str
-    :param:     :name_output: name of the algorithm; str
-    :param:     :id_: experiment's ID; str
-    :param:     :param: parameters from mlapi_parameters.json"""
+    """
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(transformer.fit_transform(X_train))
     shap.summary_plot(shap_values, transformer.fit_transform(X_train), plot_type="bar", feature_names=feature_names,
@@ -245,13 +226,7 @@ def plot_shap(transformer, model, feature_names, X_train, output_dir, name_outpu
 
 
 def plot_tree(model, feature_names, output_dir, name_output, id_):
-    """This function plots the Decision Tree of the DecisionTreeClassifier currently fit.
-    :param:     :grid: GridSearch results if grid_search parameter is TRUE; Pipeline parameters otherwise
-    :param:     :X_train: X_trains set; numpy array
-    :param:     :output_dir: name of the output directory where to save shap plot; str
-    :param:     :name_output: name of the algorithm; str
-    :param:     :id_: experiment's ID; str
-    :param:     :param: parameters from mlapi_parameters.json"""
+    """This function plots the Decision Tree of the DecisionTreeClassifier currently fit."""
     fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10000 / 100, 12000 / 100), dpi=100)
     tree.plot_tree(model, feature_names=feature_names, max_depth=4, filled=True, fontsize=90, ax=axes)
     plt.savefig(f'{output_dir}/{name_output}_{id_}/decision_tree.png', dpi=100)
@@ -296,6 +271,41 @@ def explainer_dashboard(model, X_test, y_test):
     ExplainerDashboard(explainer).run()
 
 
+def choose_algo(data):
+    """This function returns the best performing algorithm for a given dataset data according to target_api """
+    if data['target_api'].str.contains('api_particulier').any():
+        algorithms = [CatBoostClassifier()]
+        algorithms_names = ['CatBoostClassifier']
+    elif data['target_api'].str.contains('api_r2p_sandbox').any():
+        algorithms = [CatBoostClassifier()]
+        algorithms_names = ['CatBoostClassifier']
+    elif data['target_api'].str.contains('franceconnect').any():
+        algorithms = [SVC()]
+        algorithms_names = ['SVC']
+    elif data['target_api'].str.contains('aidants_connect').any():
+        algorithms = [XGBClassifier()]
+        algorithms_names = ['XGBClassifier']
+    elif data['target_api'].str.contains('api_entreprise').any():
+        algorithms = [LogisticRegression()]
+        algorithms_names = ['LogisticRegression']
+    elif data['target_api'].str.contains('api_impot_particulier_fc_sandbox').any():
+        algorithms = [XGBClassifier()]
+        algorithms_names = ['XGBClassifier']
+    elif data['target_api'].str.contains('api_ficoba_sandbox').any():
+        algorithms = [LogisticRegression()]
+        algorithms_names = ['LogisticRegression']
+    elif data['target_api'].str.contains('cartobio').any():
+        algorithms = [LogisticRegression()]
+        algorithms_names = ['LogisticRegression']
+    elif data['target_api'].str.contains('api_impot_particulier_sandbox').any():
+        algorithms = [RandomForestClassifier()]
+        algorithms_names = ['RandomForestClassifier']
+    else:
+        algorithms = [XGBClassifier()]
+        algorithms_names = ['XGBClassifier']
+    return algorithms, algorithms_names
+
+
 def main():
     for param in PARAMETERS:
         data_dir = Path(param["data_dir"])
@@ -321,14 +331,17 @@ def main():
             # 4. Train/test splitting
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
             # 5. Train and test algorithms
-            if param["simple_mode"]:
-                algorithms = [XGBClassifier()]
-                algorithms_names = ['XGBClassifier']
+            if param['explainerdashboard']:
+                algorithms, algorithms_names = choose_algo(data)
             else:
-                algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(), CatBoostClassifier(),
-                              SVC(), DecisionTreeClassifier()]
-                algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier',
-                                    'CatBoostClassifier', 'SVC', 'DecisionTreeClassifier']
+                if param["simple_mode"]:
+                    algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
+                    algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier']
+                else:
+                    algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(), CatBoostClassifier(),
+                                  SVC(), DecisionTreeClassifier()]
+                    algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier',
+                                        'CatBoostClassifier', 'SVC', 'DecisionTreeClassifier']
             for algorithm, algo_name in zip(algorithms, algorithms_names):
                 new_results_row["algo_name"] = algo_name
                 print(f"Now starting to fit algorithm: {algo_name}")
