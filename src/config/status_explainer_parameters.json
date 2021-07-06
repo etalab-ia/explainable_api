@@ -1,0 +1,10 @@
+[
+  {
+    "data_path":"../data/output.csv",
+    "aggregate_cat": true,
+    "results_file": "../output/results_explainer.csv",
+    "test_author": "giulia",
+    "grid_search": false,
+    "target_api": "api_particulier"
+  }
+]
