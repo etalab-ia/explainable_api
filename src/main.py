@@ -64,12 +64,13 @@ if PARAMETER_FILE.exists():
 else:
     raise FileNotFoundError(f"Config file {PARAMETER_FILE.as_posix()} does not exist.")
 
+# IMPORTANT: dans cette version du code, si on veut prendre en compte les colonnes contant du texte comme features, on peut le faire
+# uniquement si on indique TOUTES les colonnes texte dans la liste FEATURES
+# Pour rappel, ['nom_raison_sociale', 'intitule', 'fondement_juridique_title', 'description'] sont les colonnes  texte
 
-# TO DO:  Modify all features to list of columns;
-# TO DO:  Formaliser l'analyse des erreurs
-# PISTES: traiter les demandes refusées comme des outliers
-# PISTES: similarité entre le texte
-# TO DO: have a look at precision/recall curve wih different thresholds
+FEATURES = ['categorie_juridique_label', 'activite_principale_label', 'target_api', 'nom_raison_sociale', 'intitule',
+            'fondement_juridique_title', 'description']
+
 
 def prepare_results_csv(new_results_row, param):
     """This function fills the new_results_row dictionary with some basic info about the experiment (experience ID, time etc.).
@@ -99,7 +100,7 @@ def update_results(new_results_row, name_output, data, param, text_enc):
     new_results_row["explain_mode"] = str(param["explain_mode"])
     new_results_row["text_enc"] = str(text_enc)
     new_results_row["grid_search"] = str(param["grid_search"])
-    new_results_row["all_features"] = str(param["all_features"])
+    new_results_row["features"] = FEATURES
     return new_results_row
 
 
@@ -111,48 +112,58 @@ def modify_act_principale(data):
     return data['activite_principale']
 
 
-def preprocess_data(data, text_enc, agg_cat, all_features):
+def preprocess_data(data, text_enc, agg_cat, features):
     """Returns X and y for a given dataset together with the adequate column transformer for a given text transformer"""
-    if all_features:
-        data = data.drop(columns=['id', 'siret', 'instruction_comment',
-                                  'fondement_juridique_url'])
-        data['activite_principale'] = modify_act_principale(data)
+    if len(features) == 0:
+        raise ValueError('Please give at least one feature.')
     else:
-        data = data.drop(columns=['id', 'siret', 'categorie_juridique', 'activite_principale', 'instruction_comment',
-                                  'fondement_juridique_url'])
-    data = impute_nans(data, all_features=all_features)
-    cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
-    if agg_cat:
-        data = aggregate_cat(data, cat_variables)
-    text_col = ['nom_raison_sociale', 'intitule', 'fondement_juridique_title', 'description']
-    one_hot_enc = OneHotEncoder(handle_unknown='ignore')
-    label_enc = preprocessing.LabelEncoder()
-    if data['target_api'].str.contains('api_impot_particulier_fc_sandbox').any() or data['target_api'].str.contains(
-            'api_r2p_sandbox').any():
-        data = data.drop(text_col)
-        columns_trans = make_column_transformer((one_hot_enc, cat_variables))
-    else:
-        data = remove_stopwords(data, text_col)
-        columns_trans = make_column_transformer((one_hot_enc, cat_variables), (text_enc, 'nom_raison_sociale'),
-                                                (text_enc, 'intitule'),
-                                                (text_enc, 'fondement_juridique_title'),
-                                                (text_enc, 'description'))
-    y = data['status'].values
-    y = label_enc.fit_transform(y)
-    X = data.drop(columns=['status'])
+        useless_col = ['id', 'siret', 'instruction_comment',
+                       'fondement_juridique_url']
+        data = data.drop(columns=useless_col)
+        cat_variables = ['target_api', 'categorie_juridique_label', 'activite_principale_label']
+        cat_to_encode = []
+        for feature in features:
+            if feature in cat_variables:
+                cat_to_encode.append(feature)
+            elif feature == 'activite_principale':
+                data['activite_principale'] = modify_act_principale(data)
+            elif feature == 'status':
+                raise ValueError('The status column in the target variable and cannot be considered as feature.'
+                                 'Please remove status from FEATURES list')
+        data = impute_nans(data, features=features)
+        if agg_cat:
+            data = aggregate_cat(data, cat_variables=cat_to_encode)
+        text_col = ['nom_raison_sociale', 'intitule', 'fondement_juridique_title', 'description']
+        one_hot_enc = OneHotEncoder(handle_unknown='ignore')
+        if len(cat_to_encode) != 0:
+            if set(text_col).issubset(features):
+                data = remove_stopwords(data, text_col)
+                columns_trans = make_column_transformer((one_hot_enc, cat_to_encode), (text_enc, 'nom_raison_sociale'),
+                                                        (text_enc, 'intitule'),
+                                                        (text_enc, 'fondement_juridique_title'),
+                                                        (text_enc, 'description'))
+            else:
+                columns_trans = make_column_transformer((one_hot_enc, cat_to_encode))
+        label_enc = preprocessing.LabelEncoder()
+        y = data['status'].values
+        y = label_enc.fit_transform(y)
+        X = data[features]
     return X, y, columns_trans
 
 
-def impute_nans(data, all_features):
+def impute_nans(data, features):
     """This function imputes missing values in each column containing missing values by creating a new category
     called *missing*."""
     missing_values_imp = SimpleImputer(strategy='constant', fill_value='missing')
     missing_cols = ['categorie_juridique_label', 'activite_principale_label', 'nom_raison_sociale', 'description',
                     'intitule', 'fondement_juridique_title']
-    data[missing_cols] = missing_values_imp.fit_transform(data[missing_cols])
-    if all_features:
-        numerical_imputer = SimpleImputer(strategy='constant', fill_value=0)
-        numerical_missing = ['categorie_juridique', 'activite_principale']
+    missing_cols = [feature for feature in features if feature in missing_cols]
+    if set(missing_cols).issubset(features) and len(missing_cols) != 0:
+        data[missing_cols] = missing_values_imp.fit_transform(data[missing_cols])
+    numerical_imputer = SimpleImputer(strategy='constant', fill_value=0)
+    numerical_missing = ['categorie_juridique', 'activite_principale']
+    numerical_missing = [feature for feature in features if feature in numerical_missing]
+    if set(numerical_missing).issubset(features) and len(numerical_missing) != 0:
         data[numerical_missing] = numerical_imputer.fit_transform(data[numerical_missing])
     return data
 
@@ -206,8 +217,12 @@ def plot_feature_imp(transformer, model, feature_names, X_train, output_dir, nam
     """
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(transformer.fit_transform(X_train))
-    shap.summary_plot(shap_values, transformer.fit_transform(X_train).toarray(), feature_names=feature_names,
-                      show=False, plot_size=(25, 15))
+    if isinstance(X_train, np.ndarray):
+        shap.summary_plot(shap_values, transformer.fit_transform(X_train).toarray(), feature_names=feature_names,
+                          show=False, plot_size=(25, 15))
+    else:
+        shap.summary_plot(shap_values, transformer.fit_transform(X_train), feature_names=feature_names,
+                          show=False, plot_size=(25, 15))
     plt.tight_layout()
     plt.savefig(f'{output_dir}/{name_output}_{id_}/shap_summary_plot.png')
     plt.close()
@@ -266,8 +281,16 @@ def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_
     test_df.to_csv(f'{output_dir}/{name_output}_{id_}/{algo_name}_test_data.csv')
 
 
-def explainer_dashboard(model, X_test, y_test):
-    explainer = ClassifierExplainer(model, X_test, y_test)
+def explainer_dashboard(model, X_test, y_test, algo_name):
+    """Runs the explainerdashboard app according to the model and to the test dataset. The SHAP Explainer (Tree, Linear)
+    is chosen according to the algorithm type."""
+    if algo_name == 'XGBoostClassifier' or algo_name == 'CatBoostClassifier' or algo_name == 'RandomForestClassifier':
+        shap = 'tree'
+    elif algo_name == 'LogisticRegression':
+        shap = 'linear'
+    else:
+        shap = 'guess'
+    explainer = ClassifierExplainer(model, X_test, y_test, shap=shap)
     ExplainerDashboard(explainer).run()
 
 
@@ -280,8 +303,8 @@ def choose_algo(data):
         algorithms = [CatBoostClassifier()]
         algorithms_names = ['CatBoostClassifier']
     elif data['target_api'].str.contains('franceconnect').any():
-        algorithms = [SVC()]
-        algorithms_names = ['SVC']
+        algorithms = [LogisticRegression()]
+        algorithms_names = ['LogisticRegression']
     elif data['target_api'].str.contains('aidants_connect').any():
         algorithms = [XGBClassifier()]
         algorithms_names = ['XGBClassifier']
@@ -327,12 +350,14 @@ def main():
             text_enc = TfidfVectorizer(ngram_range=(1, 3))
             new_results_row = update_results(new_results_row, name_output, data, param, text_enc)
             agg_cat = param["aggregate_cat"]
-            X, y, columns_trans = preprocess_data(data, text_enc, agg_cat, all_features=param["all_features"])
+            X, y, columns_trans = preprocess_data(data, text_enc, agg_cat, features=FEATURES)
             # 4. Train/test splitting
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
             # 5. Train and test algorithms
             if param['explainerdashboard']:
                 algorithms, algorithms_names = choose_algo(data)
+                #algorithms = [SVC()]
+                #algorithms_names = ['SVC']
             else:
                 if param["simple_mode"]:
                     algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
@@ -370,7 +395,7 @@ def main():
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
                     display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
-                    explainer_dashboard(model=grid, X_test=X_test, y_test=y_test)
+                    explainer_dashboard(model=grid, X_test=X_test, y_test=y_test,algo_name=algo_name)
                 else:
                     pipe.fit(X_train, y_train)
                     transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
@@ -390,7 +415,7 @@ def main():
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
                     display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
-                    explainer_dashboard(model=pipe, X_test=X_test, y_test=y_test)
+                    explainer_dashboard(model=pipe, X_test=X_test, y_test=y_test,algo_name=algo_name)
 
 
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
