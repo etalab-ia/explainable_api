@@ -281,8 +281,16 @@ def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_
     test_df.to_csv(f'{output_dir}/{name_output}_{id_}/{algo_name}_test_data.csv')
 
 
-def explainer_dashboard(model, X_test, y_test):
-    explainer = ClassifierExplainer(model, X_test, y_test)
+def explainer_dashboard(model, X_test, y_test, algo_name):
+    """Runs the explainerdashboard app according to the model and to the test dataset. The SHAP Explainer (Tree, Linear)
+    is chosen according to the algorithm type."""
+    if algo_name == 'XGBoostClassifier' or algo_name == 'CatBoostClassifier' or algo_name == 'RandomForestClassifier':
+        shap = 'tree'
+    elif algo_name == 'LogisticRegression':
+        shap = 'linear'
+    else:
+        shap = 'guess'
+    explainer = ClassifierExplainer(model, X_test, y_test, shap=shap)
     ExplainerDashboard(explainer).run()
 
 
@@ -295,8 +303,8 @@ def choose_algo(data):
         algorithms = [CatBoostClassifier()]
         algorithms_names = ['CatBoostClassifier']
     elif data['target_api'].str.contains('franceconnect').any():
-        algorithms = [SVC()]
-        algorithms_names = ['SVC']
+        algorithms = [LogisticRegression()]
+        algorithms_names = ['LogisticRegression']
     elif data['target_api'].str.contains('aidants_connect').any():
         algorithms = [XGBClassifier()]
         algorithms_names = ['XGBClassifier']
@@ -347,9 +355,9 @@ def main():
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
             # 5. Train and test algorithms
             if param['explainerdashboard']:
-                # algorithms, algorithms_names = choose_algo(data)
-                algorithms = [XGBClassifier()]
-                algorithms_names = ['XGBClassifier']
+                algorithms, algorithms_names = choose_algo(data)
+                #algorithms = [SVC()]
+                #algorithms_names = ['SVC']
             else:
                 if param["simple_mode"]:
                     algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
@@ -387,7 +395,7 @@ def main():
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
                     display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
-                    explainer_dashboard(model=grid, X_test=X_test, y_test=y_test)
+                    explainer_dashboard(model=grid, X_test=X_test, y_test=y_test,algo_name=algo_name)
                 else:
                     pipe.fit(X_train, y_train)
                     transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
@@ -407,7 +415,7 @@ def main():
                     results = results.append(new_results_row, ignore_index=True)
                     results.to_csv(results_csv, index=False)
                     display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
-                    explainer_dashboard(model=pipe, X_test=X_test, y_test=y_test)
+                    explainer_dashboard(model=pipe, X_test=X_test, y_test=y_test,algo_name=algo_name)
 
 
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
