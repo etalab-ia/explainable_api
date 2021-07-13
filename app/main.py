@@ -1,6 +1,8 @@
 import base64
 import datetime
 import io
+from pathlib import Path
+from typing import Dict
 
 import dash
 from dash.dependencies import Input, Output, State
@@ -8,8 +10,23 @@ import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import dash_html_components as html
 import dash_table
-
+import pickle
 import pandas as pd
+
+experiments_per_api_path = Path("../data/per_api_experiments.pkl")
+with open(experiments_per_api_path, "rb") as filo:
+    experiments_per_api = pickle.load(filo)
+
+
+def create_explain_dashboards(experiments_per_api: Dict[str, Dict]):
+    """
+    Takes in a dict of the shape below and produces a layout for each of them:
+    {{"model": pipe, "X_test": X_test, "y_test": y_test, "algo_name": algo_name}}
+    :param experiments_per_api:
+    :return:
+    """
+    pass
+
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -22,7 +39,7 @@ app.layout = html.Div([
         id='upload-data',
         children=html.Div([
             'Drag and Drop or ',
-            html.A('Select Files')
+            html.A('Select Files'),
         ]),
         style={
             'width': '100%',
@@ -34,15 +51,20 @@ app.layout = html.Div([
             'textAlign': 'center',
             'margin': '10px'
         },
-        # Allow multiple files to be uploaded
         multiple=False
     ),
+    html.Div([
+        dcc.Dropdown(
+            id='api-dropdown',
+            options=[{"label": k, "value": "k"} for k in experiments_per_api.keys()],
+            value='api_particulier')
+    ]),
     html.Div([
         dcc.Tabs(id='tabs-example', value='tab-1', children=[
             dcc.Tab(label='Data', value='tab-1'),
             dcc.Tab(label='Analysis', value='tab-2'),
         ]),
-    ]),
+    ], style={"margin": "10px"}),
 
     html.Div(id='data-content'),
 ])
@@ -73,12 +95,6 @@ def parse_contents(contents, filename, date):
             columns=[{'name': i, 'id': i} for i in df.columns]
         ),
         html.Hr(),  # horizontal line
-        # For debugging, display the raw contents provided by the web browser
-        # html.Div('Raw Content'),
-        # html.Pre(contents[0:200] + '...', style={
-        #     'whiteSpace': 'pre-wrap',
-        #     'wordBreak': 'break-all'
-        # })
     ])
 
 
@@ -101,7 +117,6 @@ def render_content(tab, list_of_contents, list_of_names, list_of_dates):
         return html.Div([
             html.H4('Upload document2')
         ])
-
 
 
 # @app.callback(Output('data-content', 'children'),
