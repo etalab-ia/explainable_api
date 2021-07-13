@@ -58,15 +58,19 @@ import shap
 from sklearn import tree
 import mglearn
 from explainerdashboard import ClassifierExplainer, ExplainerDashboard
+import argparse
 
 from src.config.parameter_grid import algorithms_grid
 
-PARAMETER_FILE = Path("config/mlapi_parameters.json")
-if PARAMETER_FILE.exists():
-    with open(PARAMETER_FILE) as fout:
-        PARAMETERS = json.load(fout)
-else:
-    raise FileNotFoundError(f"Config file {PARAMETER_FILE.as_posix()} does not exist.")
+
+def read_parameters(parameters_file: Path):
+    if parameters_file.exists():
+        with open(parameters_file) as fout:
+            parameters = json.load(fout)
+    else:
+        raise FileNotFoundError(f"Config file {parameters_file.as_posix()} does not exist.")
+    return parameters
+
 
 # IMPORTANT: dans cette version du code, si on veut prendre en compte les colonnes contant du texte comme features, on peut le faire
 # uniquement si on indique TOUTES les colonnes texte dans la liste FEATURES
@@ -340,8 +344,9 @@ def choose_algo(data):
     return algorithms, algorithms_names
 
 
-def main():
-    for param in PARAMETERS:
+def main(parameters_file: Path):
+    parameters = read_parameters(parameters_file=parameters_file)
+    for param in parameters:
         data_dir = Path(param["data_dir"])
         output_dir = Path(param["output_dir"])
         results_csv = Path(param["results_file"])
@@ -451,4 +456,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config_file", type=str, default="./src/config/mlapi_parameters.json")
+    args = parser.parse_args()
+    main(Path(args.config_file))
