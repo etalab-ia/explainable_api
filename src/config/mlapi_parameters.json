@@ -6,6 +6,7 @@
     "aggregate_cat": true,
     "explain_mode": true,
     "results_file": "../output/results.csv",
+    "per_api_data_file": "../output/per_api_experiments.pkl",
     "test_author": "giulia",
     "grid_search": false,
     "explainerdashboard": true
