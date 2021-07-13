@@ -302,7 +302,7 @@ def get_explainer_dashboard(model, X_test, y_test, algo_name,
         shap = 'guess'
 
     explainer = ClassifierExplainer(model, X_test, y_test, shap=shap)
-    dashboard = ExplainerDashboard(explainer, title=f"{api_name} API")
+    dashboard = ExplainerDashboard(explainer, title=f"{api_name}")
     if only_return_explainer:
         return dashboard
     else:
