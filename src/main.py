@@ -355,9 +355,9 @@ def main():
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
             # 5. Train and test algorithms
             if param['explainerdashboard']:
-                algorithms, algorithms_names = choose_algo(data)
-                #algorithms = [SVC()]
-                #algorithms_names = ['SVC']
+                #algorithms, algorithms_names = choose_algo(data)
+                algorithms = [XGBClassifier()]
+                algorithms_names = ['XGBClassifier']
             else:
                 if param["simple_mode"]:
                     algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
