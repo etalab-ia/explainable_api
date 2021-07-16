@@ -25,6 +25,9 @@ output_dir/dataset_name_ID
 # TO DO: fix issue with saving decision tree figure
 
 import glob
+import pickle
+from collections import defaultdict
+
 import matplotlib.pyplot as plt
 
 import pandas as pd
@@ -56,13 +59,19 @@ import shap
 from sklearn import tree
 import mglearn
 from explainerdashboard import ClassifierExplainer, ExplainerDashboard
+import argparse
 
-PARAMETER_FILE = Path("config/mlapi_parameters.json")
-if PARAMETER_FILE.exists():
-    with open(PARAMETER_FILE) as fout:
-        PARAMETERS = json.load(fout)
-else:
-    raise FileNotFoundError(f"Config file {PARAMETER_FILE.as_posix()} does not exist.")
+from src.config.parameter_grid import algorithms_grid
+
+
+def read_parameters(parameters_file: Path):
+    if parameters_file.exists():
+        with open(parameters_file) as fout:
+            parameters = json.load(fout)
+    else:
+        raise FileNotFoundError(f"Config file {parameters_file.as_posix()} does not exist.")
+    return parameters
+
 
 # IMPORTANT: dans cette version du code, si on veut prendre en compte les colonnes contant du texte comme features, on peut le faire
 # uniquement si on indique TOUTES les colonnes texte dans la liste FEATURES
@@ -272,7 +281,7 @@ def info_from_pipeline(grid, param, algo_name):
 
 
 def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name):
-    """This function returns a csv file of the test dataset together with the result predicted by the algorithm."""
+    """This function creates a csv file of the test dataset together with the result predicted by the algorithm."""
     list_predicted_status = prediction.tolist()
     test = X_test.copy()
     test['real_status'] = y_test
@@ -281,7 +290,9 @@ def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_
     test_df.to_csv(f'{output_dir}/{name_output}_{id_}/{algo_name}_test_data.csv')
 
 
-def explainer_dashboard(model, X_test, y_test, algo_name):
+def get_explainer_dashboard(model, X_test, y_test, algo_name,
+                            api_name,
+                            only_return_explainer=False):
     """Runs the explainerdashboard app according to the model and to the test dataset. The SHAP Explainer (Tree, Linear)
     is chosen according to the algorithm type."""
     if algo_name == 'XGBoostClassifier' or algo_name == 'CatBoostClassifier' or algo_name == 'RandomForestClassifier':
@@ -290,8 +301,13 @@ def explainer_dashboard(model, X_test, y_test, algo_name):
         shap = 'linear'
     else:
         shap = 'guess'
+
     explainer = ClassifierExplainer(model, X_test, y_test, shap=shap)
-    ExplainerDashboard(explainer).run()
+    dashboard = ExplainerDashboard(explainer, title=f"{api_name}")
+    if only_return_explainer:
+        return dashboard
+    else:
+        dashboard.run()
 
 
 def choose_algo(data):
@@ -329,94 +345,115 @@ def choose_algo(data):
     return algorithms, algorithms_names
 
 
-def main():
-    for param in PARAMETERS:
+def main(parameters_file: Path):
+    parameters = read_parameters(parameters_file=parameters_file)
+    for param in parameters:
         data_dir = Path(param["data_dir"])
         output_dir = Path(param["output_dir"])
         results_csv = Path(param["results_file"])
+        per_api_data_pkl = Path(param["per_api_data_file"])
+
         results = pd.read_csv(results_csv)
+
         new_results_row = {}
         new_results_row, id_ = prepare_results_csv(new_results_row, param)
-        list_csvs = [Path(p) for p in glob.glob(data_dir.joinpath("./*.csv").as_posix())]
-        for dataset in list_csvs:
-            name_output = dataset.stem
-            print(f"Now treating dataset named {name_output}")
-            # 1. Create an output folder
-            if not output_dir.joinpath(f"{name_output}_{id_}").exists():
-                output_dir.joinpath(f"{name_output}_{id_}").mkdir()
-            # 2. Read data
-            data = pd.read_csv(dataset)
-            # 3. Preprocess data for ML
-            text_enc = TfidfVectorizer(ngram_range=(1, 3))
-            new_results_row = update_results(new_results_row, name_output, data, param, text_enc)
-            agg_cat = param["aggregate_cat"]
-            X, y, columns_trans = preprocess_data(data, text_enc, agg_cat, features=FEATURES)
-            # 4. Train/test splitting
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
-            # 5. Train and test algorithms
-            if param['explainerdashboard']:
-                #algorithms, algorithms_names = choose_algo(data)
-                algorithms = [XGBClassifier()]
-                algorithms_names = ['XGBClassifier']
-            else:
-                if param["simple_mode"]:
-                    algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
-                    algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier']
-                else:
-                    algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(), CatBoostClassifier(),
-                                  SVC(), DecisionTreeClassifier()]
-                    algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier',
-                                        'CatBoostClassifier', 'SVC', 'DecisionTreeClassifier']
-            for algorithm, algo_name in zip(algorithms, algorithms_names):
-                new_results_row["algo_name"] = algo_name
-                print(f"Now starting to fit algorithm: {algo_name}")
-                # 6. GridSearch on pipeline
-                pipe = make_pipeline(columns_trans, algorithm)
-                if param["grid_search"]:
-                    param_grid = algorithms_grid[algo_name]
-                    grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
-                    grid.fit(X_train, y_train)
-                    transformer, feature_names, model = info_from_pipeline(grid, param, algo_name=algo_name.lower())
-                    # 7. SHAP plot
-                    if param["explain_mode"]:
-                        if algo_name == 'XGBClassifier':
-                            plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output, id_)
-                            plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_)
-                        elif algo_name == 'DecisionTreeClassifier':
-                            plot_tree(model, feature_names, output_dir, name_output, id_)
-                        elif algo_name == 'LogisticRegression':
-                            linear_coefficients(model, feature_names, output_dir, name_output, id_)
-                    print(f"Best estimator:\n{grid.best_estimator_}")
-                    prediction = grid.predict(X_test)
-                    parameters_used = str(grid.best_estimator_[algo_name.lower()])
-                    new_results_row = compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row,
-                                                      algo_name,
-                                                      parameters_used)
-                    results = results.append(new_results_row, ignore_index=True)
-                    results.to_csv(results_csv, index=False)
-                    display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
-                    explainer_dashboard(model=grid, X_test=X_test, y_test=y_test,algo_name=algo_name)
-                else:
-                    pipe.fit(X_train, y_train)
-                    transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
-                    if param["explain_mode"]:
-                        if algo_name == 'XGBClassifier':
-                            plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output, id_)
-                            plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_)
-                        elif algo_name == 'DecisionTreeClassifier':
-                            plot_tree(model, feature_names, output_dir, name_output, id_)
-                        elif algo_name == 'LogisticRegression':
-                            linear_coefficients(model, feature_names, output_dir, name_output, id_)
-                    prediction = pipe.predict(X_test)
-                    parameters_used = algorithm.get_params(False)
-                    new_results_row = compute_metrics(y_test, prediction, output_dir, name_output, id_, new_results_row,
-                                                      algo_name,
-                                                      parameters_used)
-                    results = results.append(new_results_row, ignore_index=True)
-                    results.to_csv(results_csv, index=False)
-                    display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
-                    explainer_dashboard(model=pipe, X_test=X_test, y_test=y_test,algo_name=algo_name)
 
+        list_csvs = [Path(p) for p in glob.glob(data_dir.joinpath("./*.csv").as_posix())]
+        dict_api_expe = defaultdict(dict)
+        expe_info = {}
+
+        for dataset in list_csvs[:]:
+            name_output = dataset.stem
+            try:
+
+                print(f"Now treating dataset named {name_output}")
+                # 1. Create an output folder
+                if not output_dir.joinpath(f"{name_output}_{id_}").exists():
+                    output_dir.joinpath(f"{name_output}_{id_}").mkdir()
+                # 2. Read data
+                data = pd.read_csv(dataset)
+                # 3. Preprocess data for ML
+                text_enc = TfidfVectorizer(ngram_range=(1, 3))
+                new_results_row = update_results(new_results_row, name_output, data, param, text_enc)
+                agg_cat = param["aggregate_cat"]
+                X, y, columns_trans = preprocess_data(data, text_enc, agg_cat, features=FEATURES)
+                # 4. Train/test splitting
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
+                # 5. Train and test algorithms
+                if param['explainerdashboard']:
+                    algorithms, algorithms_names = choose_algo(data)
+
+                else:
+                    if param["simple_mode"]:
+                        algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
+                        algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier']
+                    else:
+                        algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier(),
+                                      CatBoostClassifier(),
+                                      SVC(), DecisionTreeClassifier()]
+                        algorithms_names = ['LogisticRegression', 'RandomForestClassifier', 'XGBClassifier',
+                                            'CatBoostClassifier', 'SVC', 'DecisionTreeClassifier']
+                for algorithm, algo_name in zip(algorithms, algorithms_names):
+                    new_results_row["algo_name"] = algo_name
+                    print(f"Now starting to fit algorithm: {algo_name}")
+                    # 6. GridSearch on pipeline
+                    pipe = make_pipeline(columns_trans, algorithm)
+                    if param["grid_search"]:
+                        param_grid = algorithms_grid[algo_name]
+                        grid = GridSearchCV(pipe, param_grid=param_grid, cv=5)
+                        grid.fit(X_train, y_train)
+                        transformer, feature_names, model = info_from_pipeline(grid, param, algo_name=algo_name.lower())
+                        # 7. SHAP plot
+                        if param["explain_mode"]:
+                            if algo_name == 'XGBClassifier':
+                                plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output,
+                                                 id_)
+                                plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_)
+                            elif algo_name == 'DecisionTreeClassifier':
+                                plot_tree(model, feature_names, output_dir, name_output, id_)
+                            elif algo_name == 'LogisticRegression':
+                                linear_coefficients(model, feature_names, output_dir, name_output, id_)
+                        print(f"Best estimator:\n{grid.best_estimator_}")
+                        prediction = grid.predict(X_test)
+                        parameters_used = str(grid.best_estimator_[algo_name.lower()])
+                        new_results_row = compute_metrics(y_test, prediction, output_dir, name_output, id_,
+                                                          new_results_row,
+                                                          algo_name,
+                                                          parameters_used)
+                        results = results.append(new_results_row, ignore_index=True)
+                        results.to_csv(results_csv, index=False)
+                        display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
+                        expe_info = {"model": grid.best_estimator_,
+                                     "X_test": X_test, "y_test": y_test, "algo_name": algo_name}
+                    else:
+                        pipe.fit(X_train, y_train)
+                        transformer, feature_names, model = info_from_pipeline(pipe, param, algo_name=algo_name.lower())
+                        if param["explain_mode"]:
+                            if algo_name == 'XGBClassifier':
+                                plot_feature_imp(transformer, model, feature_names, X_train, output_dir, name_output,
+                                                 id_)
+                                plot_shap(transformer, model, feature_names, X_train, output_dir, name_output, id_)
+                            elif algo_name == 'DecisionTreeClassifier':
+                                plot_tree(model, feature_names, output_dir, name_output, id_)
+                            elif algo_name == 'LogisticRegression':
+                                linear_coefficients(model, feature_names, output_dir, name_output, id_)
+                        prediction = pipe.predict(X_test)
+                        parameters_used = algorithm.get_params(False)
+                        new_results_row = compute_metrics(y_test, prediction, output_dir, name_output, id_,
+                                                          new_results_row,
+                                                          algo_name,
+                                                          parameters_used)
+                        results = results.append(new_results_row, ignore_index=True)
+                        results.to_csv(results_csv, index=False)
+                        display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
+                        expe_info = {"model": pipe, "X_test": X_test, "y_test": y_test, "algo_name": algo_name}
+                dict_api_expe[name_output] = expe_info
+            except Exception as e:
+                print(f"Could not experiment with dataset {name_output}. Error: {e}")
+
+        print(f"Saving experiments per API to {per_api_data_pkl}")
+        with open(per_api_data_pkl, "wb") as filo:
+            pickle.dump(dict_api_expe, filo)
 
 algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4, 1.5, 0.2),
                                           "logisticregression__class_weight": ['balanced', {0: .3, 1: .7},
@@ -456,4 +493,7 @@ algorithms_grid = {'LogisticRegression': {"logisticregression__C": np.arange(0.4
                    }}
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config_file", type=str, default="./src/config/mlapi_parameters.json")
+    args = parser.parse_args()
+    main(Path(args.config_file))
