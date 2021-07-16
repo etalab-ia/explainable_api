@@ -1,0 +1,16 @@
+"dataset_name","dataset_size","refused (%)","best_algo","accuracy","recall_0","recall_1","precision_0","precision_1","f_score_macro","f_score_weigthed","text_enc"
+"france_connect",1384,19,"SVC",0.92,0.68,0.97,0.85,0.93,0.85,0.91,"TfidVec"
+"api_entreprise",424,29.25,"SVC",0.76,0.58,0.84,0.6,0.83,0.71,0.76,"TfidVec"
+"api_particulier",302,27.81,"RandomForestClassifier",0.91,0.81,0.95,0.88,0.9,0.86,0.89,"TfidVec"
+"cartobio",190,6.84,"XGBClassifier",0.94,0,1,0,0.94,0.48,0.91,"TfidVec"
+"aidants_connect",179,11.73,"XGBClassifier",0.89,0,1,0,0.89,0.47,0.84,"TfidVec"
+"api_impot_particulier_sandbox",104,16.34,"RandomForestClassifier",0.96,1,0.95,0.8,1,0.93,0.96,"TfidVec"
+"api_r2p_sandbox",97,8.24,"CatBoostClassifier",1,1,1,1,1,1,1,"No_text"
+"api_ficoba_sandbox",22,36.36,"LogisticRegression",0.83,0.5,1,1,0.8,0.78,0.53,"TfidVec"
+"api_impot_particulier_fc_sandbox",21,38.09,"CatBoostClassifier",0.83,0.5,1,1,0.8,0.78,0.81,"No_text"
+"le_taxi_chauffeurs",14,35.71,"LogisticRegression",1,1,1,1,1,1,1,"TfidVec"
+"francerelance_fc",13,7.69,"LogisticRegression",1,1,1,1,1,1,1,
+"le_taxi_clients",10,,,,,,,,,,
+"api_impot_particulier_fc_production",3,,,,,,,,,,
+"api_droits_cnam",3,,,,,,,,,,
+"api_hermes_sandbox",1,,,,,,,,,,
