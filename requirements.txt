@@ -7,7 +7,6 @@ lightgbm==3.2.1
 lime==0.2.0.1
 mglearn==0.1.9
 nltk==3.6.2
-numpy @ file:///tmp/build/80754af9/numpy_and_numpy_base_1620831195661/work
 olefile==0.46
 seaborn==0.11.1
 shortuuid==1.0.1
