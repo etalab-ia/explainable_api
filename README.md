@@ -1,8 +1,8 @@
 # ml_api
 
-This repository contains :
+Instructions:
 
-1.  A **Machine Learning pipeline** to treat data contained in the 'data' directory (mostly text and categorical columns): encoding categorical variables, treating text data, imuputing data etc and train and test algorithms 
-2.  A code writing a **results.csv** file recording all the Machine Learning experiments using different possible parameters available in the config directoy
-3.  A code computing an saving multiple **explainable plots**: SHAP plots, Decision Trees
-4.  A code integrating the pipeline to  explainerdashboard (https://explainerdashboard.readthedocs.io/en/latest/)
+1. Fork/Clone the repo
+2. Upload data in the `data` directory : you need to upload csv files grouped by API type (ex. upload data_API1.csv, data_API2.csv etc.in the `data` directory)
+3. Run the makefile to build the app
+
