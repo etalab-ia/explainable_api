@@ -68,10 +68,6 @@ def read_parameters(parameters_file: Path):
     return parameters
 
 
-# IMPORTANT: dans cette version du code, si on veut prendre en compte les colonnes contant du texte comme features, on peut le faire
-# uniquement si on indique TOUTES les colonnes texte dans la liste FEATURES
-# Pour rappel, ['nom_raison_sociale', 'intitule', 'fondement_juridique_title', 'description'] sont les colonnes  texte
-
 FEATURES = ['categorie_juridique_label', 'activite_principale_label', 'target_api', 'nom_raison_sociale', 'intitule',
             'fondement_juridique_title', 'description']
 
@@ -275,14 +271,14 @@ def info_from_pipeline(grid, param, algo_name):
     return transformer, feature_names, model
 
 
-def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name):
-    """This function creates a csv file of the test dataset together with the result predicted by the algorithm."""
-    list_predicted_status = prediction.tolist()
-    test = X_test.copy()
-    test['real_status'] = y_test
-    test['status_predicted'] = list_predicted_status
-    test_df = pd.DataFrame(test)
-    test_df.to_csv(f'{output_dir}/{name_output}_{id_}/{algo_name}_test_data.csv')
+# def display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name):
+#     """This function creates a csv file of the test dataset together with the result predicted by the algorithm."""
+#     list_predicted_status = prediction.tolist()
+#     test = X_test.copy()
+#     test['real_status'] = y_test
+#     test['status_predicted'] = list_predicted_status
+#     test_df = pd.DataFrame(test)
+#     test_df.to_csv(f'{output_dir}/{name_output}_{id_}/{algo_name}_test_data.csv')
 
 
 def get_explainer_dashboard(model, X_test, y_test, algo_name,
@@ -340,6 +336,16 @@ def choose_algo(data):
     return algorithms, algorithms_names
 
 
+def generate_csvs(main_dataset):
+    """This function takes the main_dataset csv file and separates it in multiple csv files according to the target_api type.
+    """
+    main_df = pd.read_csv(main_dataset)
+    for api in main_df['target_api'].unique():
+        api_df = main_df[main_df['target_api'] == api]
+        if len(api_df) > 20:
+            api_df.to_csv(f'./data/data_by_api/output_{api}.csv', index_label=None)
+
+
 def main(parameters_file: Path):
     parameters = read_parameters(parameters_file=parameters_file)
     for param in parameters:
@@ -352,8 +358,11 @@ def main(parameters_file: Path):
 
         new_results_row = {}
         new_results_row, id_ = prepare_results_csv(new_results_row, param)
-
-        list_csvs = [Path(p) for p in glob.glob(data_dir.joinpath("./*.csv").as_posix())]
+        # generate csvs according to target_api
+        main_dataset = glob.glob(data_dir.joinpath("./*.csv").as_posix())[0]
+        generate_csvs(main_dataset=main_dataset)
+        # list of csv to be treated
+        list_csvs = [Path(p) for p in glob.glob(data_dir.joinpath("./data_by_api/*.csv").as_posix())]
         dict_api_expe = defaultdict(dict)
         expe_info = {}
 
@@ -377,7 +386,6 @@ def main(parameters_file: Path):
                 # 5. Train and test algorithms
                 if param['explainerdashboard']:
                     algorithms, algorithms_names = choose_algo(data)
-
                 else:
                     if param["simple_mode"]:
                         algorithms = [LogisticRegression(), RandomForestClassifier(), XGBClassifier()]
@@ -417,7 +425,6 @@ def main(parameters_file: Path):
                                                           parameters_used)
                         results = results.append(new_results_row, ignore_index=True)
                         results.to_csv(results_csv, index=False)
-                        display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
                         expe_info = {"model": grid.best_estimator_,
                                      "X_test": X_test, "y_test": y_test, "algo_name": algo_name}
                     else:
@@ -440,7 +447,6 @@ def main(parameters_file: Path):
                                                           parameters_used)
                         results = results.append(new_results_row, ignore_index=True)
                         results.to_csv(results_csv, index=False)
-                        display_test(prediction, X_test, y_test, output_dir, name_output, id_, algo_name)
                         expe_info = {"model": pipe, "X_test": X_test, "y_test": y_test, "algo_name": algo_name}
                 dict_api_expe[name_output] = expe_info
             except Exception as e:

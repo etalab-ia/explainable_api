@@ -1,10 +1,10 @@
 [
   {
     "data_dir":"./data",
-    "output_dir": "./output/output_tfid",
+    "output_dir": "./output/output_results",
     "simple_mode": true,
     "aggregate_cat": true,
-    "explain_mode": true,
+    "explain_mode": false,
     "results_file": "./output/results.csv",
     "per_api_data_file": "./output/per_api_experiments.pkl",
     "test_author": "giulia",
