@@ -7,6 +7,8 @@ The main focus of the project is to understand and explain the choices taken by 
 
 The repo takes a dataset containing requests as an input, runs adequate Machine Learning algorithms and returns an application explaining the results obtained by the algorithms.
 
+In order to use it:
+
 1. **Fork/Clone** the **repo**
 2. **Upload the data**: upload the csv file in the `data` directory
 3. **Run** the **makefile** to build the app
